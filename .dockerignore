@@ -1,0 +1,37 @@
+# El contexto de build no necesita el .git (grande y ruido) ni el .env con las
+# credenciales reales: la imagen recibe la configuración por variables de
+# entorno desde docker-compose, no por archivo.
+.git
+.gitignore
+.gitattributes
+.env
+.env.*
+!.env.example
+
+# Material interno que no va en la imagen.
+docs/
+admin/AUDITORIA.md
+
+# Sistema operativo y editores.
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Los adjuntos de los asociados no se cocinan en la imagen.
+uploads/
+storage/
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.webp
+
+# Documentación de la imagen, no código de la app.
+Dockerfile
+docker-compose.yml
+.dockerignore
+README.md

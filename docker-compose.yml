@@ -1,0 +1,98 @@
+# Stack de pruebas locales: la app PHP y su PostgreSQL.
+#
+#   docker compose up -d --build      levantar
+#   docker compose logs -f app        ver el log
+#   docker compose down               parar
+#   docker compose down -v            parar y borrar la base
+#
+# ---------------------------------------------------------------------------
+# De dónde salen las variables de AWS
+# ---------------------------------------------------------------------------
+# Compose lee el `.env` de este mismo directorio para la sustitución ${VAR}, así
+# que las credenciales de AWS se toman del archivo que ya existe. No hace falta
+# copiarlas a otro lado.
+#
+# Lo que sí se deja fuera a propósito: APP_DATA_KEY y JWT_SECRET. Son las llaves
+# con las que producción cifra los datos de los asociados, y no deberían
+# cifrar datos de prueba. El contenedor genera las suyas y las guarda en un
+# volumen, para que no cambien entre arranques (ver docker/entrypoint.sh).
+#
+# ATENCIÓN: el bucket al que apunte este stack es el mismo que usa producción.
+# Las pruebas escriben objetos ahí y el borrado de adjuntos es real. Si se quiere
+# aislar de verdad, crear un bucket aparte y poner su nombre en S3_BUCKET_NAME.
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mpv-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mpv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mpv_dev_local}
+      POSTGRES_DB: ${POSTGRES_DB:-mpv}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # El app depende de esto, no de un sleep: sin healthcheck, el primer
+      # arranque gana a PostgreSQL y la migración muere al azar.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mpv} -d ${POSTGRES_DB:-mpv}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    # Sin publicar el 5432: la base solo hace falta dentro de la red de Compose.
+    # Si se expone al host, cualquiera que llegue a ese puerto puede intentar
+    # autenticarse contra el postgres con la contraseña de arriba.
+    expose:
+      - "5432"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mpv-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8080}:80"
+    environment:
+      # --- Base de datos (dentro de la red de Compose) ---
+      DB_HOST: db
+      DB_PORT: "5432"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-mpv}:${POSTGRES_PASSWORD:-mpv_dev_local}@db:5432/${POSTGRES_DB:-mpv}"
+
+      # --- AWS / S3: tomados del .env del host ---
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-sa-east-1}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+
+      # --- Datos institucionales ---
+      MPV_NUMERO: ${MPV_NUMERO:-MPV-DIR-001-2026}
+      MPV_TITULO: ${MPV_TITULO:-Mesa de Partes Virtual}
+      MPV_RESPONSABLE: ${MPV_RESPONSABLE:-Unidad de Tecnologías de la Información}
+      MPV_RESPONSABLE_NOMBRE: ${MPV_RESPONSABLE_NOMBRE:-Jefe/a de Mesa de Partes}
+      MPV_CORREO: ${MPV_CORREO:-mesadepartes@amsp.org.pe}
+      MPV_TELEFONO: ${MPV_TELEFONO:-(01) 331-0083 / 424-3262}
+      MPV_HORARIO: ${MPV_HORARIO:-Lunes a viernes de 8:00 a 17:00 h}
+      MPV_APEX: ${MPV_APEX:-Asociación Mutualista Sanitaria del Perú (AMSP)}
+      MPV_DIRECCION: ${MPV_DIRECCION:-Jr. Ramón Dagnino 117, Santa Beatriz, Cercado de Lima}
+
+      # --- Sesión y usuario inicial ---
+      SESSION_DURATION_HOURS: ${SESSION_DURATION_HOURS:-2}
+      SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-admin}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_ADMIN_ROLE: ${SEED_ADMIN_ROLE:-super-admin}
+
+      # APP_DATA_KEY y JWT_SECRET no se pasan: los genera el entrypoint.
+    volumes:
+      # Persistencia de las llaves de cifrado y de los archivos de sesión.
+      # Sin este volumen, cada `down`/`up` regeneraría las llaves y los datos
+      # ya cifrados dejarían de descifrarse.
+      - appdata:/var/www/storage
+
+volumes:
+  pgdata:
+  appdata:

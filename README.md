@@ -45,6 +45,9 @@ La plataforma funciona como Mesa de Partes Virtual de la entidad e incorpora:
 - Servidor web (Apache/nginx) o el servidor embebido de PHP
 - PostgreSQL (solo para grafos de solicitudes; configuración en `DATABASE_URL`)
 
+O bien, nada de lo anterior: **Docker Desktop** y `docker compose up -d --build`
+(ver [Puesta en marcha con Docker](#puesta-en-marcha-con-docker-recomendado)).
+
 ---
 
 ## Configuración
@@ -73,10 +76,68 @@ solicitud o al consultar las páginas MPV.
 
 ---
 
+## Puesta en marcha con Docker (recomendado)
+
+Levanta PHP 8.3 + Apache y PostgreSQL 16 sin instalar nada en el sistema. La
+única cosa que tienes que tener lista es el `.env` con las credenciales de AWS,
+que ya existe en este proyecto.
+
+```bash
+docker compose up -d --build
+```
+
+Abrir: **http://localhost:8080**
+
+`docker-compose.yml` lee el `.env` del host automáticamente, así que las
+credenciales de AWS **no se copian dentro de la imagen** (`.dockerignore` lo
+impide). Solo se inyectan como variables de entorno en tiempo de ejecución.
+
+### Qué hace el entrypoint
+
+`docker/entrypoint.sh`, en orden:
+
+1. Espera a que PostgreSQL acepte conexiones.
+2. Genera `APP_DATA_KEY` y `JWT_SECRET` si no existen, y los guarda en el volumen
+   `appdata`. Son 64 hexadecimales cada uno.
+3. Los escribe en `/var/www/html/.env` en modo `640 root:www-data`, para que
+   también los vean los scripts CLI (`docker compose exec app php ...`).
+4. Aplica el esquema y crea el usuario admin si hay `SEED_ADMIN_PASSWORD`.
+5. Arranca Apache.
+
+> **No uses `docker compose down -v`.** El flag `-v` borra el volumen `appdata` y
+> con él las llaves de cifrado. Todo lo cifrado con `APP_DATA_KEY` deja de poder
+> descifrarse. Para reiniciar limpio se usa `docker compose down` a secas.
+
+El `.env` que escribe el contenedor queda en el docroot, pero Apache lo bloquea:
+`GET /.env` responde **403**, igual que `includes/`, `tests/`, `bin/`,
+`schema.sql` y `admin/AUDITORIA.md`. No es un `.env` de desarrollo, es un
+`.env` generado en cada arranque y controlado por permisos.
+
+### Comandos útiles
+
+```bash
+docker compose exec app php bin/check-env.php   # extensiones y variables
+docker compose exec app php tests/run.php       # 149 pruebas
+docker compose exec app php bin/migrate.php     # reaplicar esquema / seed
+docker compose logs -f app                      # ver arranque
+```
+
+`bin/check-env.php` es el primer sitio donde mirar si algo falla: comprueba las
+10 extensiones que necesita la app y dice qué variable falta, sin imprimir
+ningún valor.
+
+### Notas sobre S3
+
+No hay soporte de MinIO ni endpoint configurable: `S3Service` firma contra AWS
+real. Las pruebas locales usan el bucket que digas en `S3_BUCKET_NAME`, así que
+apunta a un bucket de pruebas, no al de producción.
+
+---
+
 ## Puesta en marcha (desarrollo)
 
-Con el servidor embebido de PHP (docroot debe ser el padre, porque la app
-usa rutas absolutas `/solicitudes/...`):
+Sin Docker, con el servidor embebido de PHP (docroot debe ser el padre, porque
+la app usa rutas absolutas `/solicitudes/...`):
 
 ```bash
 cd migracion-app
