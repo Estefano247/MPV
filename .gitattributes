@@ -1,0 +1,20 @@
+# Normaliza los finales de linea en el repositorio para que el mismo archivo no
+# aparezca como modificado entero en cada maquina.
+* text=auto
+
+# El proyecto es PHP: LF en el repositorio, sin conversiones.
+*.php text eol=lf
+*.js  text eol=lf
+*.sql text eol=lf
+*.md  text eol=lf
+
+# Los .env.example y .gitignore los usa git, no el editor.
+.env.example text eol=lf
+.gitignore    text eol=lf
+
+# Binarios: que git no intente normalizar ni diffear.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.pdf  binary

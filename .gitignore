@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------------------
+# Secretos y datos locales
+# ---------------------------------------------------------------------------
+
+# Credenciales reales: AWS, base de datos, llaves de cifrado, password de seed.
+# .env.example sí se versiona; este archivo no.
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# Documentación interna
+# ---------------------------------------------------------------------------
+# Los .md de docs/ y el registro de auditoría son material interno de la
+# mutual: contienen datos de contacto, responsables y la directives vigente.
+# No corresponden a un repositorio público.
+/docs/
+admin/AUDITORIA.md
+
+# ---------------------------------------------------------------------------
+# Datos de la aplicación
+# ---------------------------------------------------------------------------
+# Archivos subidos por los asociados. Nunca deben ir al repositorio:
+# son documentos personales de terceros.
+/uploads/
+/storage/
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# ---------------------------------------------------------------------------
+# PHP
+# ---------------------------------------------------------------------------
+vendor/
+composer.lock
+.phpunit.result.cache
+
+# ---------------------------------------------------------------------------
+# Sistema operativo y editores
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*~
