@@ -147,15 +147,29 @@ fi
 # ---------------------------------------------------------------------------
 # En Railway la app debe escuchar en $PORT (variable que inyecta la plataforma);
 # en docker compose no llega y Apache se queda en :80.
+#
+# No se reescribe ports.conf a mano: en Debian ese archivo es el que carga el MPM
+# (LoadModule mpm_prefork_module) además del Listen 80. Pisarlo con un solo "Listen"
+# dejaba el MPM sin cargar y Apache moría con "More than one MPM loaded".
+# En su lugar se cambia solo la línea Listen, dejando intacto el resto.
 if [ -n "${PORT:-}" ]; then
-    printf 'Listen %s\n' "$PORT" > /etc/apache2/ports.conf
-    sed -i "s/<VirtualHost \\*:80>/<VirtualHost *:$PORT>/" \
+    sed -i "s/^Listen .*/Listen $PORT/" /etc/apache2/ports.conf
+    sed -i "s/<VirtualHost \*:80>/<VirtualHost *:$PORT>/" \
         /etc/apache2/sites-available/000-default.conf 2>/dev/null || true
     log "apache escuchando en :$PORT"
 fi
 
 mkdir -p /var/www/storage/sessions
 chown -R www-data:www-data /var/www/storage
+
+# Comprobación de la configuración ANTES de arrancar: en un orquestador como
+# Railway, un Apache que muere al arrancar reinicia el contenedor en bucle y se
+# pierde el error entre reinicios. Con -t, un vhost mal formado corta el
+# despliegue aquí, con el motivo a la vista.
+if ! apache2ctl configtest; then
+    log "FALLO: la configuración de Apache no es válida (ver arriba)."
+    exit 1
+fi
 
 log "iniciando: $*"
 exec "$@"
