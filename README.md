@@ -29,13 +29,18 @@ La plataforma funciona como Mesa de Partes Virtual de la entidad e incorpora:
 6. **Flujo de derivación y seguimiento** — áreas (`areas`), movimientos
    (`movimientos`) y seguimiento público (`seguimiento.php`) o interno
    (`admin/`).
-7. **Seguridad** — cifrado en tránsito (HTTPS), cifrado en reposo de documentos
+7. **Observación y subsanación** — el área registra una observación
+   (`observaciones`) y el expediente queda `observado` con un plazo para
+   responder; el remitente la subsana en `subsanacion.php`, recibe su propio
+   `Nº de cargo` (`S-AAAA-NNNNNN`) y acuse, y el área acepta o rechaza lo
+   presentado (`subsanaciones`).
+8. **Seguridad** — cifrado en tránsito (HTTPS), cifrado en reposo de documentos
    (SSE-AES-256 en S3) y de datos personales (AES-256-GCM vía `DataProtector`,
    clave `APP_DATA_KEY`), roles (`admin`, `empleado`, `super-admin`), bitácora de
    auditoría (`audit_log`) y respaldos.
-8. **Política de privacidad** — `docs/politica-de-privacidad.md` (Ley 29733).
-9. **Manual de procedimientos y capacitación** — `docs/manual-de-procedimientos.md`.
-10. **Soporte, contingencia y publicación en web** — `docs/soporte-y-contingencia.md`.
+9. **Política de privacidad** — `docs/politica-de-privacidad.md` (Ley 29733).
+10. **Manual de procedimientos y capacitación** — `docs/manual-de-procedimientos.md`.
+11. **Soporte, contingencia y publicación en web** — `docs/soporte-y-contingencia.md`.
 
 ---
 
@@ -67,6 +72,7 @@ O bien, nada de lo anterior: **Docker Desktop** y `docker compose up -d --build`
 | `AMSP_API_BASE` | (Opcional) Base de la API AMSP. Por defecto `https://amspweb.net/api` |
 | `PUBLIC_URL` | (Opcional) URL pública del portal. Por defecto `http://localhost:8080` |
 | `MPV_*` | Datos institucionales de la MPV (número, responsable, correo, horario...) |
+| `MPV_PLAZO_OBSERVACION_DIAS` | Días de plazo para subsanar una observación. Por defecto 10, acotado a 5-90 |
 
 El esquema de la base se encuentra en `schema.sql` (único, con todas las tablas:
 `solicitudes`, MPV, panel y auditoría) y se **crea/corrige solo** al guardar una
@@ -117,7 +123,7 @@ El `.env` que escribe el contenedor queda en el docroot, pero Apache lo bloquea:
 
 ```bash
 docker compose exec app php bin/check-env.php   # extensiones y variables
-docker compose exec app php tests/run.php       # 149 pruebas
+docker compose exec app php tests/run.php       # 270 pruebas
 docker compose exec app php bin/migrate.php     # reaplicar esquema / seed
 docker compose logs -f app                      # ver arranque
 ```
@@ -131,6 +137,50 @@ ningún valor.
 No hay soporte de MinIO ni endpoint configurable: `S3Service` firma contra AWS
 real. Las pruebas locales usan el bucket que digas en `S3_BUCKET_NAME`, así que
 apunta a un bucket de pruebas, no al de producción.
+
+---
+
+## Despliegue en Railway (con Docker)
+
+Railway construye el **Dockerfile de la raíz** directamente (PHP 8.3 + Apache,
+las mismas extensiones y el mismo vhost que en local). Nada de Railpack, Caddy ni
+Composer: la imagen es una sola, para local y para el despliegue, y el arranque es
+el mismo `docker/entrypoint.sh`.
+
+**Qué hace el entrypoint en el despliegue:** saca el host/puerto del PostgreSQL
+de `DATABASE_URL` (cuando no hay `DB_HOST` explícito), espera a que responda,
+deja las llaves de cifrado, aplica el esquema y siembra el admin
+(`Setup::ensureDatabase()`), reconfigura Apache para escuchar en `$PORT` (la
+variable de Railway) y arranca Apache.
+
+**Variables de entorno en Railway:**
+
+| Variable | Descripción |
+|---|---|
+| `DATABASE_URL` | Del plugin PostgreSQL (el entrypoint espera ese host) |
+| `APP_DATA_KEY` | 64 hex. **Ponla fija**: reutiliza la del `.env` local para descifrar lo ya cifrado |
+| `JWT_SECRET` | 64 hex |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET_NAME` | S3 de los adjuntos |
+| `SEED_ADMIN_USERNAME`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_ROLE` | Usuario del panel (se crea solo al crear el esquema; si no, `admin/setup.php`) |
+| `MPV_*`, `PUBLIC_URL`, `AMSP_API_BASE`, `SESSION_DURATION_HOURS`, `MPV_PLAZO_OBSERVACION_DIAS` | Igual que en el `.env` |
+
+**Pasos:**
+1. Nuevo proyecto → *Deploy from GitHub repo* → *Add Postgres*.
+2. Copiar el `DATABASE_URL` del plugin a la variable `DATABASE_URL`.
+3. Añadir el resto de variables (tabla anterior). Sin `APP_DATA_KEY`/`JWT_SECRET`
+   el entrypoint los genera en el primer arranque y se quedan en el volumen.
+4. Dejar `Start Command` vacío y `Deploy` en automático. Railway conecta `$PORT`
+   y el entrypoint mueve Apache a ese puerto.
+
+**Qué no se sirve por HTTP** — el vhost de Apache en la imagen
+(`docker/apache-vhost.conf`) devuelve 403 en `/includes/`, `/docs/`, `/tests/`,
+`/bin/`, `/docker/`, `/vendor/`, `.git/`, `.env*` y los `.sql/.md/.log...`, igual
+que local. La app no separa público de privado, esta configuración es la barrera.
+
+**Notas**
+- Sin `SEED_ADMIN_*`, el panel arranca igual: los `users` se crean desde
+  `admin/setup.php` (bórralo o protégelo tras usarlo, como en producción).
+- No usar `docker compose down -v` local: borra las llaves de cifrado.
 
 ---
 
@@ -161,8 +211,9 @@ Con Apache/nginx, apuntar el docroot a `migracion-app/` y acceder a
 | `/solicitudes/guardar.php` | POST: persevera la solicitud en PostgreSQL |
 | `/solicitudes/upload-url.php` | POST: genera URL S3 firmada para el adjunto |
 | `/solicitudes/mpv/` | **Mesa de Partes Virtual** (formulario + transparencia) |
-| `/solicitudes/acuse.php` | Acuse de recibo por trámite (`?id=&t=`, también `?pdf=1`) |
+| `/solicitudes/acuse.php` | Acuse de recibo por trámite (`?id=&t=`) o por subsanación (`?sub=&t=`, también `?pdf=1`) |
 | `/solicitudes/seguimiento.php` | Seguimiento público por cargo/expediente + DNI |
+| `/solicitudes/subsanacion.php` | Subsanación pública de observaciones (Nº de cargo/expediente + DNI) |
 | `/solicitudes/admin/` | **Panel administrativo** (migración del dashboard React a PHP puro) |
 
 ### Mesa de Partes Virtual (`/solicitudes/mpv/`)
@@ -211,8 +262,38 @@ El `submissionId` que genera el cliente es la clave de idempotencia del alta:
 > idempotencia con dobles.
 
 El seguimiento público (`seguimiento.php`) devuelve la línea de tiempo de
-`movimientos` (registro → derivaciones entre áreas → cambios de estado) a partir
-del cargo/expediente + DNI.
+`movimientos` (registro → derivaciones entre áreas → cambios de estado → observaciones
+y subsanaciones) a partir del cargo/expediente + DNI.
+
+### Observación y subsanación
+
+El flujo completo vive en `includes/SubsanacionService.php`, con los datos en
+`observaciones` y `subsanaciones` (`includes/ObservacionRepository.php` es el
+único que las escribe).
+
+- **Observar.** `registrarObservacion()` valida el detalle (máx. 1000
+  caracteres) y el plazo (5 a 90 días, por defecto `MPV_PLAZO_OBSERVACION_DIAS`),
+  abre el requerimiento y pasa el expediente a `observado`. Un índice único
+  parcial sobre `observaciones` garantiza **una sola observación pendiente por
+  expediente**; la observación, el cambio de estado y el movimiento van en un
+  único commit.
+- **Subsanar.** `subsanacion.php` pide el Nº de cargo o expediente y el DNI.
+  El expediente **nunca** se localiza por el UUID que manda el cliente: bastaría
+  conocerlo para subsanar un trámite ajeno. Cada subsanación emite su propio
+  correlativo `S-AAAA-NNNNNN` y su acuse (`acuse.php?sub=<id>&t=<hash>`), y
+  guarda los adjuntos en `files` con `subsanacion_id`. Al presentarse, la
+  observación queda `atendida` y el expediente **sigue `observado`**: subsanar
+  no resuelve nada por sí solo.
+- **Revisar.** `revisarSubsanacion()` acepta (el expediente vuelve a
+  `en_revision`) o rechaza (la observación vuelve a `pendiente` con plazo
+  nuevo). El área también puede desistir: `admin/api/status.php` llama a
+  `desestimar()` cuando el operador saca el expediente de `observado` por el
+  selector de estado.
+- **Idempotencia y plazo vencido.** Un reintento con el mismo `subsanacionId`
+  devuelve el mismo acuse sin duplicar nada ni quemar correlativo. Vencido el
+  plazo la subsanación **se admite igual**: el sistema avisa y decide el área.
+- **Privacidad.** La descripción de la subsanación se cifra en reposo con
+  `DataProtector`, igual que la del alta original.
 
 ### Previsualización de archivos
 
@@ -327,18 +408,27 @@ Resumen:
 ```
 /solicitudes
 ├── .env                    # Variables reales (NO commiterar)
+├── Dockerfile             # Imagen PHP 8.3 + Apache (local y Railway)
 ├── index.php              # Simulador de préstamo
 ├── login.php              # Portal del asociado (DNI + fecha nacimiento)
 ├── afiliacion.php         # Redirige a la MPV (trámite de afiliación)
 ├── guardar.php            # Guarda solicitudes
 ├── upload-url.php         # Genera URL S3 firmada (kms/AES256)
-├── acuse.php              # Acuse de recibo (HTML/PDF)
+├── acuse.php              # Acuse de recibo (HTML/PDF), de alta y de subsanación
 ├── seguimiento.php        # Seguimiento público de expedientes
+├── subsanacion.php        # Subsanación pública de observaciones
+├── guardar-subsanacion.php # POST: registra la subsanación (idempotente)
 ├── mis-solicitudes.php    # Listado de presentaciones del asociado
 ├── README.md              # Este documento
 ├── schema.sql             # Esquema único de la BD (solicitudes, MPV, panel, auditoría)
 ├── mpv/                   # Mesa de Partes Virtual
 │   └── index.php          #   Formulario unificado (9 trámites, ?tipo=, requisitos)
+├── docker/                # Soporte de la imagen (entrypoint y vhost)
+│   ├── entrypoint.sh      #   Espera la BD (DATABASE_URL o DB_HOST), aplica esquema,
+│   │                      #   deja APP_DATA_KEY/JWT_SECRET y mueve Apache a $PORT
+│   ├── apache-vhost.conf  #   Vhost: bloquea includes/, .env, .sql/.md...
+│   └── php-dev.ini        #   PHP para desarrollo local
+├── bin/                   # CLI solo local (check-env, migrate)
 ├── docs/                  # Documentación institucional en Markdown (no se sirve por HTTP)
 │   ├── directiva.md
 │   ├── politica-de-privacidad.md
@@ -347,18 +437,22 @@ Resumen:
 ├── tests/                 # Suite propia: php tests/run.php
 ├── admin/                 # Panel administrativo
 │   ├── login.php, index.php, auditoria.php, setup.php
-│   └── api/               # bootstrap, me, files, status, delete, areas, seguimiento, derivar
+│   └── api/               # bootstrap, me, files, status, delete, areas, seguimiento,
+│                          #   derivar, observacion, subsanacion
 └── includes/
     ├── AmspApiClient.php       # Cliente HTTP de la API AMSP
     ├── config.php              # Carga .env y devuelve configuración
     ├── Database.php            # Conexión PostgreSQL (doble driver)
     ├── S3Service.php           # Firmado y subida a S3 (SSE-AES-256)
     ├── Setup.php               # Setup automático (schema base + MPV)
-    ├── SubmissionRepository.php # Persistencia de solicitudes
+    ├── SubmissionRepository.php # Persistencia de solicitudes y adjuntos
+    ├── ObservacionRepository.php # Persistencia de observaciones y subsanaciones
+    ├── SubsanacionService.php   # Caso de uso: observar, subsanar, revisar
+    ├── CorrelativoRepository.php # Correlativos C- / E- / S-
     ├── Auth.php                # Utilidades (escape, formato, ...)
     ├── DataProtector.php       # Cifrado AES-256-GCM de datos personales
     ├── PdfBuilder.php          # Generador mínimo de PDF (acuse)
-    ├── AcuseService.php        # Correlativos, hash, acuse, áreas, movimientos
+    ├── AcuseService.php        # Hash, acuse HTML/PDF, áreas, movimientos
     ├── Audit.php               # Bitácora de auditoría
     ├── Dashboard.php           # Sesión JWT, roles, listado del panel
     ├── helpers.php             # Utilidades (escape, formato, ...)
@@ -377,11 +471,11 @@ Resumen:
 - Tokens CSRF por sesión en los formularios que persisten datos.
 - Generación de URLs S3 firmadas (vigencia breve) con expiración de sesión.
 - **Cifrado en reposo**: documentos en S3 con SSE-AES-256 (header firmado en la
-  presigned URL y enviado en el PUT) y descripciones de trámites en PostgreSQL con
-  AES-256-GCM (`DataProtector`).
+  presigned URL y enviado en el PUT) y descripciones de trámites y de
+  subsanaciones en PostgreSQL con AES-256-GCM (`DataProtector`).
 - **Roles**: `admin`, `empleado` y `super-admin`; derivación restringida a
   `admin`/`super-admin`.
 - **Auditoría**: `audit_log` registra login, cambios de estado, derivaciones,
-  vistas de archivos y eliminaciones.
+  observaciones, revisiones de subsanación, vistas de archivos y eliminaciones.
 - **Acuse**: huella HMAC-SHA256 (`JWT_SECRET`) sobre id + números; para verlo por
   URL se exige el hash o sesión administrativa.

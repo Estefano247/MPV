@@ -7,6 +7,9 @@ require_once __DIR__ . '/../includes/Database.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/dashboard.php';
+require_once __DIR__ . '/../includes/Setup.php';
+
+Setup::ensureDatabase();
 
 dashboard_guard_page();
 

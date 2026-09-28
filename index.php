@@ -24,10 +24,6 @@ View::head('Simulador de Préstamo | AMSP', $config, 'calculadora');
                 </div>
             </div>
 
-            <div class="flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800 mb-6">
-                No puedes solicitar un crédito si no eres asociado. Primero debes estar afiliado a la AMSP.
-            </div>
-
             <div class="flex flex-col lg:flex-row gap-6">
                 <div class="flex-1 min-w-0">
                     <div class="bg-white rounded-2xl shadow-xl border p-6 sm:p-8 space-y-6">

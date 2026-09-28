@@ -6,6 +6,7 @@ $config = require __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/Database.php';
 require_once __DIR__ . '/includes/Setup.php';
 require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/ObservacionRepository.php';
 require_once __DIR__ . '/includes/SubmissionRepository.php';
 require_once __DIR__ . '/includes/AcuseService.php';
 require_once __DIR__ . '/includes/auth.php';
@@ -15,17 +16,34 @@ session_start();
 
 $mpv = $config['mpv'];
 
+// Hay dos acuses y cada uno tiene su enlace firmado: `id` es el expediente (alta)
+// y `sub` es la subsanación. Se resuelve cuál de los dos se pide antes de tocar
+// la base, para que la página sea la misma en ambos casos.
 $id = trim((string) ($_GET['id'] ?? ''));
+$idSubsanacion = trim((string) ($_GET['sub'] ?? ''));
 $probed = trim((string) ($_GET['t'] ?? ''));
 
-if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id)) {
+$uuid = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+$esSubsanacion = $idSubsanacion !== '';
+
+if ($esSubsanacion) {
+    if (!preg_match($uuid, $idSubsanacion)) {
+        http_response_code(400);
+        exit('Identificador de acuse inválido.');
+    }
+    $idSubsanacion = strtolower($idSubsanacion);
+} elseif (preg_match($uuid, $id)) {
+    $id = strtolower($id);
+} else {
     http_response_code(400);
     exit('Identificador de acuse inválido.');
 }
 
 try {
     Setup::ensureDatabase();
-    $acuse = AcuseService::datosAcuse(new SubmissionRepository(), strtolower($id));
+    $acuse = $esSubsanacion
+        ? AcuseService::datosAcuseSubsanacion(new ObservacionRepository(), new SubmissionRepository(), $idSubsanacion)
+        : AcuseService::datosAcuse(new SubmissionRepository(), $id);
 } catch (Throwable $e) {
     error_log('[ACUSE] ' . $e->getMessage());
     http_response_code(500);
@@ -48,9 +66,11 @@ if (!$isAdmin && !$hashOk) {
 // Descarga del acuse en PDF
 if (($_GET['pdf'] ?? '') === '1') {
     try {
-        $pdf = AcuseService::generarAcusePdf($acuse);
+        $pdf = $esSubsanacion
+            ? AcuseService::generarAcuseSubsanacionPdf($acuse)
+            : AcuseService::generarAcusePdf($acuse);
         header('Content-Type: application/pdf');
-        header('Content-Disposition: attachment; filename="acuse-' . preg_replace('/\W/', '', $acuse['nro_cargo']) . '.pdf"');
+        header('Content-Disposition: attachment; filename="acuse-' . preg_replace('/\W/', '', (string) $acuse['nro_cargo']) . '.pdf"');
         header('Content-Length: ' . strlen($pdf));
         echo $pdf;
         exit;
@@ -60,7 +80,9 @@ if (($_GET['pdf'] ?? '') === '1') {
     }
 }
 
-$printUrl = 'acuse.php?id=' . urlencode($id) . '&t=' . urlencode($probed) . '&pdf=1';
+$printUrl = $esSubsanacion
+    ? 'acuse.php?sub=' . urlencode($idSubsanacion) . '&t=' . urlencode($probed) . '&pdf=1'
+    : 'acuse.php?id=' . urlencode($id) . '&t=' . urlencode($probed) . '&pdf=1';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -104,30 +126,55 @@ $printUrl = 'acuse.php?id=' . urlencode($id) . '&t=' . urlencode($probed) . '&pd
             <p>Directiva de creación: <?= e((string) $mpv['numero']) ?></p>
         </div>
 
-        <div class="title">ACUSE DE RECIBO</div>
-        <div class="subtitle">Recibo emitido automáticamente por la plataforma web</div>
+        <div class="title"><?= $esSubsanacion ? 'ACUSE DE SUBSANACIÓN' : 'ACUSE DE RECIBO' ?></div>
+        <div class="subtitle"><?= $esSubsanacion
+            ? 'Subsanación de observación registrada automáticamente por la plataforma web'
+            : 'Recibo emitido automáticamente por la plataforma web' ?></div>
 
         <table>
-            <tr><td class="k">Nº de cargo</td><td class="hash"><strong><?= e($acuse['nro_cargo']) ?></strong></td></tr>
-            <tr><td class="k">Nº de expediente</td><td class="hash"><?= e($acuse['nro_expediente']) ?></td></tr>
-            <tr><td class="k">Fecha y hora de recepción</td><td><?= e(AcuseService::formatearFecha($acuse['acuse_at'])) ?></td></tr>
-            <tr><td class="k">Remitente</td><td><?= e($acuse['nombre']) ?></td></tr>
-            <tr><td class="k">D.N.I.</td><td><?= e($acuse['dni']) ?></td></tr>
-            <tr><td class="k">Correo electrónico</td><td><?= e($acuse['email']) ?></td></tr>
-            <tr><td class="k">Teléfono</td><td><?= e($acuse['telefono']) ?></td></tr>
-            <tr><td class="k">Tipo de trámite</td><td><?= e(AcuseService::labelTipo($acuse['tipo'])) ?></td></tr>
-            <tr><td class="k">Asunto</td><td><?= e($acuse['descripcion']) ?></td></tr>
-            <tr><td class="k">Archivos adjuntos</td><td><?= (int) $acuse['archivos'] ?> documento(s)</td></tr>
-            <tr><td class="k">Área responsable</td><td><?= e($acuse['area_actual'] !== '' ? $acuse['area_actual'] : 'Mesa de Partes Virtual') ?></td></tr>
+            <?php if ($esSubsanacion): ?>
+                <tr><td class="k">Nº de cargo (subsanación)</td><td class="hash"><strong><?= e($acuse['nro_cargo']) ?></strong></td></tr>
+                <tr><td class="k">Expediente que se subsana</td><td class="hash"><?= e($acuse['nro_cargo_expediente'] !== '' ? $acuse['nro_cargo_expediente'] : $acuse['nro_expediente']) ?></td></tr>
+                <tr><td class="k">Nº de expediente</td><td class="hash"><?= e($acuse['nro_expediente']) ?></td></tr>
+                <tr><td class="k">Fecha y hora de recepción</td><td><?= e(AcuseService::formatearFecha($acuse['acuse_at'])) ?></td></tr>
+                <tr><td class="k">Remitente</td><td><?= e($acuse['nombre']) ?></td></tr>
+                <tr><td class="k">D.N.I.</td><td><?= e($acuse['dni']) ?></td></tr>
+                <tr><td class="k">Correo electrónico</td><td><?= e($acuse['email']) ?></td></tr>
+                <tr><td class="k">Teléfono</td><td><?= e($acuse['telefono']) ?></td></tr>
+                <tr><td class="k">Observación subsanada</td><td><?= e($acuse['observacion'] !== '' ? $acuse['observacion'] : '—') ?></td></tr>
+                <tr><td class="k">Plazo de la observación</td><td><?= e($acuse['observacion_limite'] !== '' ? AcuseService::formatearFecha($acuse['observacion_limite']) : '—') ?></td></tr>
+                <tr><td class="k">Descripción de la subsanación</td><td><?= e($acuse['descripcion']) ?></td></tr>
+                <tr><td class="k">Archivos adjuntos</td><td><?= (int) $acuse['archivos'] ?> documento(s)</td></tr>
+                <tr><td class="k">Área responsable</td><td><?= e($acuse['area_actual'] !== '' ? $acuse['area_actual'] : 'Mesa de Partes Virtual') ?></td></tr>
+            <?php else: ?>
+                <tr><td class="k">Nº de cargo</td><td class="hash"><strong><?= e($acuse['nro_cargo']) ?></strong></td></tr>
+                <tr><td class="k">Nº de expediente</td><td class="hash"><?= e($acuse['nro_expediente']) ?></td></tr>
+                <tr><td class="k">Fecha y hora de recepción</td><td><?= e(AcuseService::formatearFecha($acuse['acuse_at'])) ?></td></tr>
+                <tr><td class="k">Remitente</td><td><?= e($acuse['nombre']) ?></td></tr>
+                <tr><td class="k">D.N.I.</td><td><?= e($acuse['dni']) ?></td></tr>
+                <tr><td class="k">Correo electrónico</td><td><?= e($acuse['email']) ?></td></tr>
+                <tr><td class="k">Teléfono</td><td><?= e($acuse['telefono']) ?></td></tr>
+                <tr><td class="k">Tipo de trámite</td><td><?= e(AcuseService::labelTipo($acuse['tipo'])) ?></td></tr>
+                <tr><td class="k">Asunto</td><td><?= e($acuse['descripcion']) ?></td></tr>
+                <tr><td class="k">Archivos adjuntos</td><td><?= (int) $acuse['archivos'] ?> documento(s)</td></tr>
+                <tr><td class="k">Área responsable</td><td><?= e($acuse['area_actual'] !== '' ? $acuse['area_actual'] : 'Mesa de Partes Virtual') ?></td></tr>
+            <?php endif; ?>
             <tr><td class="k">Código de verificación</td><td class="hash"><?= e(substr($acuse['acuse_hash'], 0, 20)) ?>...</td></tr>
         </table>
 
         <p class="legal">
-            El presente acuse acredita la recepción de la solicitud y sus documentos adjuntos en la Mesa de Partes
-            Virtual de la <?= e((string) $mpv['apex']) ?>. Su contenido se genera de manera automática al momento de la
-            presentación; por ello, conserve una copia y utilice el código de verificación para validar su autenticidad
-            en la plataforma web. La información proporcionada está protegida conforme a la política de privacidad y
-            la normativa vigente sobre protección de datos personales.
+            <?php if ($esSubsanacion): ?>
+                El presente acuse acredita la recepción de la subsanación y sus documentos adjuntos en la Mesa de
+                Partes Virtual de la <?= e((string) $mpv['apex']) ?>. La subsanación será verificada por el área
+                responsable del expediente y su aceptación o rechazo consta en el mismo. Conserve una copia y utilice
+                el código de verificación para validar su autenticidad en la plataforma web.
+            <?php else: ?>
+                El presente acuse acredita la recepción de la solicitud y sus documentos adjuntos en la Mesa de Partes
+                Virtual de la <?= e((string) $mpv['apex']) ?>. Su contenido se genera de manera automática al momento de la
+                presentación; por ello, conserve una copia y utilice el código de verificación para validar su autenticidad
+                en la plataforma web. La información proporcionada está protegida conforme a la política de privacidad y
+                la normativa vigente sobre protección de datos personales.
+            <?php endif; ?>
         </p>
 
         <div class="sign">
@@ -144,6 +191,5 @@ $printUrl = 'acuse.php?id=' . urlencode($id) . '&t=' . urlencode($probed) . '&pd
     <div class="actions">
         <button type="button" onclick="window.open('<?= e($printUrl) ?>', '_blank')" class="btn btn-primary">Descargar acuse (PDF)</button>
         <button type="button" onclick="window.print()" class="btn btn-outline">Imprimir</button>
-    </div>
-</body>
+    </div></body>
 </html>

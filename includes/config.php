@@ -86,6 +86,10 @@ if (!isset($GLOBALS['__solicitudes_config'])) {
             'horario' => (string) solicitudes_env('MPV_HORARIO', 'Lunes a viernes de 8:00 a 17:00 h'),
             'apex' => (string) solicitudes_env('MPV_APEX', 'Asociación Mutualista Sanitaria del Perú (AMSP)'),
             'direccion' => (string) solicitudes_env('MPV_DIRECCION', 'Jr. Ramón Dagnino 117, Santa Beatriz, Cercado de Lima'),
+            // Plazo por defecto que se concede al presentante para subsanar una
+            // observación. El artículo 115.5 de la Ley 27444 fija un mínimo de
+            // cinco días hábiles, así que el valor no puede bajar de ahí.
+            'plazoObservacionDias' => (int) solicitudes_env('MPV_PLAZO_OBSERVACION_DIAS', 10),
         ],
     ];
 }

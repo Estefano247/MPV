@@ -25,6 +25,16 @@ final class CorrelativoRepository implements CorrelativoRepositoryInterface
     public const TIPO_CARGO = 'cargo';
     public const TIPO_EXPEDIENTE = 'expediente';
 
+    /**
+     * Correlativo de las subsanaciones.
+     *
+     * Comparte la tabla `correlativos` (contador anual por tipo) pero lleva
+     * prefijo propio: una subsanación es una presentación nueva con su propio
+     * acuse, así que su número tiene que distinguirse del cargo del alta a
+     * simple vista. `E-` es el de expediente y `C-` el del cargo original.
+     */
+    public const TIPO_SUBSANACION = 'subsanacion';
+
     private DbConnection $db;
 
     public function __construct(?DbConnection $db = null)
@@ -51,7 +61,11 @@ final class CorrelativoRepository implements CorrelativoRepositoryInterface
 
         $rows = $stmt->fetchAll();
         $seq = (int) ($rows[0]['seq'] ?? 1);
-        $prefix = $tipo === self::TIPO_CARGO ? 'C-' : 'E-';
+        $prefix = match ($tipo) {
+            self::TIPO_CARGO => 'C-',
+            self::TIPO_SUBSANACION => 'S-',
+            default => 'E-',
+        };
 
         return $prefix . date('Y') . '-' . str_pad((string) $seq, 6, '0', STR_PAD_LEFT);
     }

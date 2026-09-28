@@ -3,9 +3,6 @@
 # llaves de cifrado en un estado estable.
 set -e
 
-DB_HOST="${DB_HOST:-db}"
-DB_PORT="${DB_PORT:-5432}"
-
 # A stderr, nunca a stdout: varias de estas funciones se invocan dentro de una
 # sustitución $(...) para devolver un valor, y si el log saliera por stdout se
 # metería dentro de la variable. Así se rompió la llave de cifrado una vez.
@@ -18,6 +15,23 @@ log() { printf '[entrada] %s\n' "$*" >&2; }
 # imagen es de PHP, y para un chequeo de TCP no vale la pena agregar paquetes.
 # El orden importa: el esquema se aplica una vez, así que correr contra una base
 # a medio levantar daría un error que parece de la app y no del arranque.
+#
+# En docker compose la DB llega como DB_HOST/DB_PORT "db". En Railway solo llega
+# DATABASE_URL (postgresql://user:pass@host:port/db), así que el host y el puerto
+# se sacan de ahí cuando no hay valor explícito.
+DB_HOST="${DB_HOST:-}"
+DB_PORT="${DB_PORT:-}"
+
+if [ -z "$DB_HOST" ] && [ -n "${DATABASE_URL:-}" ]; then
+    DB_HOST="$(php -r 'echo (string) (parse_url((string) getenv("DATABASE_URL"), PHP_URL_HOST) ?: "");')"
+fi
+if [ -z "$DB_PORT" ] && [ -n "${DATABASE_URL:-}" ]; then
+    DB_PORT="$(php -r 'echo (string) (parse_url((string) getenv("DATABASE_URL"), PHP_URL_PORT) ?: 5432);')"
+fi
+DB_HOST="${DB_HOST:-db}"
+DB_PORT="${DB_PORT:-5432}"
+export DB_HOST DB_PORT
+
 log "esperando postgres en ${DB_HOST}:${DB_PORT}..."
 intentos=0
 until php -r '
@@ -131,6 +145,15 @@ fi
 # ---------------------------------------------------------------------------
 # 5. Apache
 # ---------------------------------------------------------------------------
+# En Railway la app debe escuchar en $PORT (variable que inyecta la plataforma);
+# en docker compose no llega y Apache se queda en :80.
+if [ -n "${PORT:-}" ]; then
+    printf 'Listen %s\n' "$PORT" > /etc/apache2/ports.conf
+    sed -i "s/<VirtualHost \\*:80>/<VirtualHost *:$PORT>/" \
+        /etc/apache2/sites-available/000-default.conf 2>/dev/null || true
+    log "apache escuchando en :$PORT"
+fi
+
 mkdir -p /var/www/storage/sessions
 chown -R www-data:www-data /var/www/storage
 

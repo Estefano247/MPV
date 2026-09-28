@@ -42,6 +42,10 @@ if (!in_array($tipoInicial, $tiposPermitidos, true)) {
                     presentación recibirá un <strong>Nº de cargo</strong>, un <strong>Nº de expediente</strong> y un
                     <strong>Acuse de Recibo descargable</strong>.</p>
                 <p class="text-xs text-blue-300 mt-2">Directiva: <?= e((string) $mpv['numero']) ?> &middot; Responsable: <?= e((string) $mpv['responsable']) ?></p>
+                <p class="text-xs text-blue-300 mt-2">
+                    ¿El área le observó su expediente? Puede subsanarlo desde
+                    <a class="underline font-semibold" href="../subsanacion.php">Subsanación de observaciones</a>.
+                </p>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -455,6 +459,10 @@ if (!in_array($tipoInicial, $tiposPermitidos, true)) {
         document.getElementById('mpvAfiTipoWrap').classList.toggle('hidden', t !== 'afiliacion');
         document.getElementById('mpvAreaWrap').classList.toggle('hidden', t !== 'mpv');
         document.getElementById('mpvAsuntoWrap').classList.toggle('hidden', t !== 'mpv');
+        const esGeneral = t === 'mpv';
+        const mpvAsunto = document.getElementById('mpvAsunto');
+        mpvAsunto.required = esGeneral;
+        mpvAsunto.disabled = !esGeneral;
         document.getElementById('mpvDocsHint').textContent = tipo.docsHint;
         document.getElementById('mpvSubtitle').textContent = tipo.title + '. Los campos marcados con * son obligatorios. Documentos admisibles: PDF o imagen (máx. 10 MB cada uno).';
         document.getElementById('mpvTelefonoLabel').innerHTML = 'Teléfono' + (tipo.telReq ? ' *' : '');
@@ -548,6 +556,7 @@ if (!in_array($tipoInicial, $tiposPermitidos, true)) {
                 'Trámite registrado con <strong>Nº de cargo ' + acuse.nroCargo + '</strong> y expediente '
                 + (acuse.nroExpediente || '') + '. ' + acuseLink + continuar);
             document.getElementById('mpvForm').reset();
+            mpvAplicarTipo();
             for (const k in mpvDocs) if (mpvDocs[k].url) URL.revokeObjectURL(mpvDocs[k].url);
             mpvDocs = {};
             mpvRender();

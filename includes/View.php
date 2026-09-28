@@ -28,6 +28,7 @@ final class View
         ['clave' => 'mpv', 'texto' => 'Mesa de Partes', 'ruta' => 'mpv/'],
         ['clave' => 'portal', 'texto' => 'Portal del Asociado', 'ruta' => 'login.php'],
         ['clave' => 'seguimiento', 'texto' => 'Seguimiento', 'ruta' => 'seguimiento.php'],
+        ['clave' => 'subsanacion', 'texto' => 'Subsanación', 'ruta' => 'subsanacion.php'],
         ['clave' => 'calculadora', 'texto' => 'Calculadora', 'ruta' => 'index.php'],
     ];
 

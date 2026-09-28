@@ -64,6 +64,23 @@ interface SubmissionRepositoryInterface
     public function archivos(string $submissionId): array;
 
     /**
+     * Registra los adjuntos de una subsanación sobre el expediente del que
+     * forman parte: cuelgan del mismo submission_id (así el borrado del
+     * expediente y de S3 los sigue incluyendo) y guardan a qué subsanación
+     * pertenecen.
+     *
+     * @param array<int, array{file:string,nombre:string,mime:string}> $archivos
+     */
+    public function adjuntarSubsanacion(string $submissionId, string $subsanacionId, array $archivos): void;
+
+    /**
+     * @return array<int, array<string,mixed>>
+     */
+    public function archivosDeSubsanacion(string $subsanacionId): array;
+
+    public function contarArchivosDeSubsanacion(string $subsanacionId): int;
+
+    /**
      * @return string[]
      */
     public function s3Keys(string $submissionId): array;

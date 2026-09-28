@@ -10,6 +10,7 @@ require_once __DIR__ . '/includes/View.php';
 require_once __DIR__ . '/includes/SubmissionRepository.php';
 require_once __DIR__ . '/includes/AcuseService.php';
 require_once __DIR__ . '/includes/DataProtector.php';
+require_once __DIR__ . '/includes/SubsanacionService.php';
 
 session_name('AMSP_CLIENTE');
 session_start();
@@ -23,6 +24,9 @@ $dni = preg_replace('/\D/', '', $dni);
 $resultado = null;
 $error = null;
 $movimientos = [];
+$observaciones = [];
+$subsanaciones = [];
+$observacionVigente = null;
 
 if (($consulta !== '' || $dni !== '') && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!preg_match('/^\d{8}$/', $dni)) {
@@ -55,6 +59,13 @@ if (($consulta !== '' || $dni !== '') && $_SERVER['REQUEST_METHOD'] === 'POST') 
                     'acuse_hash' => (string) $row['acuse_hash'],
                 ];
                 $movimientos = $repo->movimientos((string) $row['submission_id']);
+
+                // Observaciones y subsanaciones: el presentante tiene que ver qué
+                // se le pide y qué entregó, sin llamar a Mesa de Partes.
+                $subsanacionesService = new SubsanacionService();
+                $observaciones = $subsanacionesService->observacionesDe((string) $row['submission_id']);
+                $subsanaciones = $subsanacionesService->subsanacionesDe((string) $row['submission_id']);
+                $observacionVigente = $subsanacionesService->observacionPendiente((string) $row['submission_id']);
             }
         } catch (Throwable $e) {
             error_log('[SEGUIMIENTO] ' . $e->getMessage());
@@ -103,6 +114,7 @@ if (($consulta !== '' || $dni !== '') && $_SERVER['REQUEST_METHOD'] === 'POST') 
                                     'aprobado' => 'bg-emerald-100 text-emerald-700',
                                     'denegado' => 'bg-red-100 text-red-700',
                                     'en_revision' => 'bg-blue-100 text-blue-700',
+                                    'observado' => 'bg-amber-200 text-amber-900',
                                     default => 'bg-amber-100 text-amber-700',
                                 } ?>">
                                 <?= e(AcuseService::ESTADOS[$resultado['status']] ?? $resultado['status']) ?>
@@ -123,6 +135,75 @@ if (($consulta !== '' || $dni !== '') && $_SERVER['REQUEST_METHOD'] === 'POST') 
                 </div>
 
                 <div class="mt-6 bg-white rounded-2xl shadow-lg border overflow-hidden">
+                    <div class="px-4 sm:px-6 py-3 border-b flex flex-wrap items-center justify-between gap-2">
+                        <h2 class="text-sm font-semibold text-gray-800">Observaciones y subsanaciones</h2>
+                        <?php if ($observacionVigente !== null): ?>
+                            <a href="subsanacion.php?numero=<?= urlencode($consulta) ?>&amp;dni=<?= urlencode($dni) ?>"
+                               class="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 transition-colors">Presentar subsanación</a>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($observaciones === [] && $subsanaciones === []): ?>
+                        <div class="p-6 text-sm text-gray-500">Su expediente no tiene observaciones registradas.</div>
+                    <?php else: ?>
+                        <div class="p-4 sm:p-6 space-y-4">
+                            <?php foreach ($observaciones as $obs): ?>
+                                <?php
+                                $vigente = (string) $obs['estado'] === 'pendiente';
+                                $limite = (string) $obs['fecha_limite'];
+                                ?>
+                                <div class="rounded-lg border <?= $vigente ? 'border-amber-200 bg-amber-50' : 'border-gray-200' ?> p-4">
+                                    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                        <span class="text-xs font-semibold uppercase tracking-wide <?= $vigente ? 'text-amber-800' : 'text-gray-500' ?>">
+                                            <?= $vigente ? 'Observación vigente' : 'Observación atendida' ?>
+                                        </span>
+                                        <span class="text-xs text-gray-500">
+                                            Registrada el <?= e(AcuseService::formatearFecha((string) $obs['created_at'])) ?>
+                                        </span>
+                                    </div>
+                                    <p class="text-sm text-gray-800 whitespace-pre-line"><?= e((string) $obs['detalle']) ?></p>
+                                    <p class="mt-2 text-xs text-gray-600">
+                                        Plazo: <?= (int) $obs['plazo_dias'] ?> días &middot;
+                                        vence el <?= e(AcuseService::formatearFecha($limite)) ?>
+                                        <?php if ($vigente && (new SubsanacionService())->vencida($limite)): ?>
+                                            <strong class="text-red-700">(plazo vencido)</strong>
+                                        <?php endif; ?>
+                                    </p>
+                                </div>
+                            <?php endforeach; ?>
+
+                            <?php foreach ($subsanaciones as $sb): ?>
+                                <div class="rounded-lg border border-gray-200 p-4">
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <span class="text-sm font-semibold text-gray-800">
+                                            Subsanación <span class="font-mono"><?= e((string) $sb['nro_cargo']) ?></span>
+                                        </span>
+                                        <span class="text-xs font-medium <?= match ((string) $sb['estado']) {
+                                            'aceptada' => 'text-emerald-700',
+                                            'rechazada' => 'text-red-700',
+                                            default => 'text-blue-700',
+                                        } ?>">
+                                            <?= e(match ((string) $sb['estado']) {
+                                                'aceptada' => 'Aceptada por el área',
+                                                'rechazada' => 'Rechazada por el área',
+                                                default => 'En revisión',
+                                            }) ?>
+                                        </span>
+                                    </div>
+                                    <p class="mt-2 text-sm text-gray-600"><?= e((string) $sb['descripcion']) ?></p>
+                                    <p class="mt-2 text-xs text-gray-500">
+                                        Presentada el <?= e(AcuseService::formatearFecha((string) $sb['created_at'])) ?>
+                                        <?php if ((string) ($sb['revisada_por'] ?? '') !== ''): ?>
+                                            &middot; revisada por <?= e((string) $sb['revisada_por']) ?>
+                                            el <?= e(AcuseService::formatearFecha((string) $sb['revisada_at'])) ?>
+                                        <?php endif; ?>
+                                    </p>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <div class="mt-6 bg-white rounded-2xl shadow-lg border overflow-hidden">
                     <div class="px-4 sm:px-6 py-3 border-b">
                         <h2 class="text-sm font-semibold text-gray-800">Movimientos del expediente</h2>
                     </div>
@@ -136,6 +217,8 @@ if (($consulta !== '' || $dni !== '') && $_SERVER['REQUEST_METHOD'] === 'POST') 
                                     'registro' => 'Registro',
                                     'derivacion' => 'Derivación',
                                     'estado' => 'Cambio de estado',
+                                    'observacion' => 'Observación',
+                                    'subsanacion' => 'Subsanación',
                                     'resolucion' => 'Resolución',
                                     default => ucfirst((string) $m['tipo']),
                                 };

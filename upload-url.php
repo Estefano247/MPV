@@ -43,10 +43,14 @@ if (strlen((string) $input['fileName']) > 255) {
     exit;
 }
 
+// 'subsanacion' no es un tipo de trámite sino el destino de los adjuntos de una
+// subsanación: se acepta aquí para que el formulario de subsanación reutilice
+// este endpoint en vez de duplicar la firma SigV4. Los datos que se registran
+// después los valida SubsanacionService, no este endpoint.
 $submissionType = (string) ($input['submissionType'] ?? 'credito');
 $validTypes = ['afiliacion', 'pre-evaluacion', 'credito', 'mpv',
     'auxilio-retiro', 'auxilio-invalidez', 'seguro-sepelio',
-    'prestamo-solidario', 'auxilio-fallecimiento'];
+    'prestamo-solidario', 'auxilio-fallecimiento', 'subsanacion'];
 if (!in_array($submissionType, $validTypes, true)) {
     $submissionType = 'credito';
 }

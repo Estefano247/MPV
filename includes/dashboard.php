@@ -10,16 +10,27 @@ require_once __DIR__ . '/Api.php';
  * estados/transiciones de solicitudes, paginación y etiquetas de UI.
  */
 
-const DASHBOARD_ALLOWED_STATUSES = ['pendiente', 'en_revision', 'aprobado', 'denegado'];
+const DASHBOARD_ALLOWED_STATUSES = ['pendiente', 'en_revision', 'observado', 'aprobado', 'denegado'];
 const DASHBOARD_ALLOWED_TYPES = [
     'credito', 'afiliacion', 'pre-evaluacion', 'mpv',
     'auxilio-retiro', 'auxilio-invalidez', 'seguro-sepelio',
     'prestamo-solidario', 'auxilio-fallecimiento',
 ];
 
+/**
+ * Transiciones permitidas del expediente.
+ *
+ * 'observado' se entra solo registrando una observación (endpoint de
+ * observaciones, que también deja la trazabilidad) y se sale cuando la
+ * subsanación es aceptada o cuando el área retira el requerimiento. Por eso no
+ * aparece como destino desde 'pendiente' ni desde 'en_revision': dejar un
+ * expediente 'observado' sin un requerimiento detrás sería un estado que el
+ * presentante no puede resolver.
+ */
 const DASHBOARD_STATUS_TRANSITIONS = [
     'pendiente' => ['en_revision'],
     'en_revision' => ['aprobado', 'denegado'],
+    'observado' => ['en_revision', 'aprobado', 'denegado'],
     'aprobado' => [],
     'denegado' => [],
 ];
@@ -73,6 +84,7 @@ function dashboard_status_label(string $status): string
     return match ($status) {
         'pendiente' => 'Pendiente',
         'en_revision' => 'En revisión',
+        'observado' => 'Con observación',
         'aprobado' => 'Aprobado',
         'denegado' => 'Denegado',
         default => '—',
@@ -85,6 +97,9 @@ function dashboard_status_badge_class(string $status): string
         'aprobado' => 'bg-emerald-100 text-emerald-700',
         'denegado' => 'bg-red-100 text-red-700',
         'en_revision' => 'bg-blue-100 text-blue-700',
+        // El ámbar es el del resto de estados en curso, pero más cargado: el
+        // expediente está a la espera de una respuesta, no solo por resolver.
+        'observado' => 'bg-amber-200 text-amber-900',
         default => 'bg-amber-100 text-amber-700',
     };
 }
@@ -135,6 +150,15 @@ function dashboard_status_options(string $current): array
         ],
         'en_revision' => [
             ['value' => 'en_revision', 'label' => 'En revisión'],
+            ['value' => 'aprobado', 'label' => 'Aprobado'],
+            ['value' => 'denegado', 'label' => 'Denegado'],
+        ],
+        // Desde 'observado' el select no ofrece el estado actual: se queda en
+        // revisión (o se resuelve, si el área se cansa de esperar) o vuelve a
+        // revisión cuando la subsanación sea aceptada, y eso lo hace el
+        // servicio de subsanaciones, no el operador.
+        'observado' => [
+            ['value' => 'en_revision', 'label' => 'Volver a revisión (retirar la observación)'],
             ['value' => 'aprobado', 'label' => 'Aprobado'],
             ['value' => 'denegado', 'label' => 'Denegado'],
         ],

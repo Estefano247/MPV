@@ -30,9 +30,19 @@ if ($conflict !== null) {
     ApiResponse::error($conflict, 400);
 }
 
+$user = dashboard_current_user();
+$username = (string) ($user['username'] ?? 'admin');
+
 $repo->actualizarEstado($id, $status);
 
-$user = dashboard_current_user();
+// Salir de 'observado' por el selector de estado significa que el área se desistió
+// del requerimiento. La observación se cierra para que no quede pendiente de un
+// expediente que ya no la espera, y para que el presentante no vea en el
+// seguimiento un plazo que ya no vigila nadie.
+if ($current === 'observado') {
+    (new SubsanacionService())->desestimar($id, $username);
+}
+
 $repo->registrarMovimiento(
     $id,
     $status === 'aprobado' || $status === 'denegado' ? 'resolucion' : 'estado',
@@ -40,7 +50,7 @@ $repo->registrarMovimiento(
     null,
     null,
     $status,
-    (string) ($user['username'] ?? 'admin')
+    $username
 );
 
 dashboard_log_audit('status_change', ['from' => $current, 'to' => $status], 'submissions', $id);

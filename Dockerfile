@@ -1,4 +1,6 @@
-# Imagen de la Mesa de Partes Virtual para desarrollo y pruebas locales.
+# Imagen de la Mesa de Partes Virtual (PHP 8.3 + Apache) para el entorno local
+# (`docker compose up -d --build`) y para el despliegue en Railway, que construye
+# este Dockerfile de la raíz.
 #
 # La app es PHP sin framework ni Composer: no hay `composer install` que hacer.
 # Lo que sí hay que resolver es el conjunto de extensiones que el código usa de
@@ -11,7 +13,7 @@
 #                         con SigV4, sin AWS SDK, sobre curl.
 #   mbstring           -> mb_strlen / mb_substr en el recorte de textos de los
 #                         acuses y las vistas.
-#   sodium             -> scryptaccelerado. Opcional: scrypt.php trae una
+#   sodium             -> scrypt acelerado. Opcional: scrypt.php trae una
 #                         implementación en PHP puro y funciona sin esta.
 FROM php:8.3-apache
 
@@ -56,7 +58,8 @@ COPY tests/ /var/www/html/tests/
 COPY admin/ /var/www/html/admin/
 COPY mpv/ /var/www/html/mpv/
 COPY index.php login.php seguimiento.php guardar.php acuse.php \
-     afiliacion.php mis-solicitudes.php upload-url.php .env.example /var/www/html/
+     afiliacion.php mis-solicitudes.php upload-url.php subsanacion.php \
+     guardar-subsanacion.php .env.example /var/www/html/
 
 # Los .php se leen en cada request, así que la propiedad es de www-data.
 RUN chmod +x /usr/local/bin/entrypoint \
@@ -64,6 +67,8 @@ RUN chmod +x /usr/local/bin/entrypoint \
     && mkdir -p /var/www/storage/keys \
     && chown -R www-data:www-data /var/www/storage
 
+# Railway enruta a $PORT (el entrypoint cambia apache a ese puerto en el arranque);
+# local queda en el 80 mapeado por compose.
 EXPOSE 80
 
 ENTRYPOINT ["entrypoint"]

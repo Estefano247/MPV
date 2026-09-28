@@ -12,4 +12,9 @@ require_once __DIR__ . '/../../includes/SubmissionRepositoryInterface.php';
 require_once __DIR__ . '/../../includes/SubmissionRepository.php';
 require_once __DIR__ . '/../../includes/AreaRepository.php';
 require_once __DIR__ . '/../../includes/AcuseService.php';
+require_once __DIR__ . '/../../includes/ObservacionRepository.php';
+require_once __DIR__ . '/../../includes/SubsanacionService.php';
 require_once __DIR__ . '/../../includes/S3Service.php';
+require_once __DIR__ . '/../../includes/Setup.php';
+
+Setup::ensureDatabase();

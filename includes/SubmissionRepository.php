@@ -263,7 +263,7 @@ final class SubmissionRepository implements SubmissionRepositoryInterface
         [$whereSql, $params] = $this->condiciones($filtros);
 
         $stmt = $this->db->prepare(
-            "SELECT status, COUNT(*) AS total FROM submissions WHERE {$whereSql} GROUP BY status"
+            "SELECT status, COUNT(*) AS total FROM submissions s WHERE {$whereSql} GROUP BY status"
         );
         $stmt->execute($params);
 
@@ -313,18 +313,64 @@ final class SubmissionRepository implements SubmissionRepositoryInterface
     /**
      * Adjuntos de un expediente, en el orden en que se subieron.
      *
+     * Trae `subsanacion_id` para que el panel distinga los documentos del alta
+     * original de los que el presentante adjuntó al subsanar.
+     *
      * @return array<int, array<string,mixed>>
      */
     public function archivos(string $submissionId): array
     {
         $stmt = $this->db->prepare(
-            'SELECT file_id, s3_key, original_name, file_type, created_at
+            'SELECT file_id, s3_key, original_name, file_type, created_at, subsanacion_id
                FROM files
               WHERE submission_id = :id
               ORDER BY created_at ASC'
         );
         $stmt->execute([':id' => $submissionId]);
         return $stmt->fetchAll();
+    }
+
+    public function adjuntarSubsanacion(string $submissionId, string $subsanacionId, array $archivos): void
+    {
+        if ($archivos === []) {
+            return;
+        }
+
+        $stmt = $this->db->prepare(
+            'INSERT INTO files (file_id, submission_id, s3_key, original_name, file_type, subsanacion_id)
+             VALUES (:file_id, :submission_id, :s3_key, :original_name, :file_type, :subsanacion_id)
+             ON CONFLICT (submission_id, s3_key) DO NOTHING'
+        );
+
+        foreach ($archivos as $archivo) {
+            $stmt->execute([
+                ':file_id' => Database::uuid(),
+                ':submission_id' => $submissionId,
+                ':s3_key' => (string) $archivo['file'],
+                ':original_name' => mb_substr((string) $archivo['nombre'], 0, 255),
+                ':file_type' => (string) $archivo['mime'],
+                ':subsanacion_id' => $subsanacionId,
+            ]);
+        }
+    }
+
+    public function archivosDeSubsanacion(string $subsanacionId): array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT file_id, s3_key, original_name, file_type, created_at
+               FROM files
+              WHERE subsanacion_id = :id
+              ORDER BY created_at ASC'
+        );
+        $stmt->execute([':id' => $subsanacionId]);
+        return $stmt->fetchAll();
+    }
+
+    public function contarArchivosDeSubsanacion(string $subsanacionId): int
+    {
+        $stmt = $this->db->prepare('SELECT COUNT(*) AS total FROM files WHERE subsanacion_id = :id');
+        $stmt->execute([':id' => $subsanacionId]);
+        return (int) ($stmt->fetchAll()[0]['total'] ?? 0);
     }
 
     /**
@@ -396,7 +442,8 @@ final class SubmissionRepository implements SubmissionRepositoryInterface
     }
 
     /**
-     * WHERE parametrizado de los filtros del panel. El tipo es obligatorio;
+     * WHERE parametrizado de los filtros del panel. El tipo es obligatorio salvo
+     * la cadena vacía, que significa "todos los tipos" (pestaña Todos del panel);
      * la búsqueda libre y los estados son opcionales.
      *
      * @param array{tipo:string,buscar:string,estados:string[]} $filtros
@@ -404,12 +451,23 @@ final class SubmissionRepository implements SubmissionRepositoryInterface
      */
     private function condiciones(array $filtros): array
     {
-        $where = ['type = :tipo'];
-        $params = [':tipo' => $filtros['tipo']];
+        $where = [];
+        $params = [];
+
+        if ($filtros['tipo'] !== '') {
+            $where[] = 'type = :tipo';
+            $params[':tipo'] = $filtros['tipo'];
+        }
 
         if ($filtros['buscar'] !== '') {
             $params[':buscar'] = '%' . $filtros['buscar'] . '%';
-            $where[] = '(name ILIKE :buscar OR dni ILIKE :buscar)';
+            // La búsqueda libre alcanza los datos del expediente (nombre, DNI,
+            // Nº de cargo y Nº de expediente) y también el Nº de cargo de
+            // cualquier subsanación presentada sobre él.
+            $where[] = '(name ILIKE :buscar OR dni ILIKE :buscar OR nro_cargo ILIKE :buscar'
+                . ' OR nro_expediente ILIKE :buscar'
+                . ' OR EXISTS (SELECT 1 FROM subsanaciones sb'
+                . ' WHERE sb.submission_id = s.submission_id AND sb.nro_cargo ILIKE :buscar))';
         }
 
         if ($filtros['estados'] !== []) {
@@ -422,6 +480,6 @@ final class SubmissionRepository implements SubmissionRepositoryInterface
             $where[] = '(' . implode(' OR ', $conds) . ')';
         }
 
-        return [implode(' AND ', $where), $params];
+        return [($where === [] ? 'TRUE' : implode(' AND ', $where)), $params];
     }
 }

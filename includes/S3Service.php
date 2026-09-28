@@ -48,6 +48,11 @@ final class S3Service
             'seguro-sepelio' => 'seguro-sepelio',
             'prestamo-solidario' => 'prestamo-solidario',
             'auxilio-fallecimiento' => 'auxilio-fallecimiento',
+            // No es un tipo de trámite: es la carpeta de los documentos que el
+            // presentante adjunta al subsanar una observación. Se agrupa por el
+            // id de la subsanación para que los adjuntos de cada requerimiento
+            // queden juntos y no se confundan con los del alta original.
+            'subsanacion' => 'subsanacion',
         ];
         $folder = $typePrefixes[$submissionType] ?? 'otros';
         $safeName = preg_replace('/[^a-zA-Z0-9._-]/', '_', $fileName);
@@ -202,11 +207,15 @@ final class S3Service
     }
 
     /**
-     * Genera una URL GET firmada (SigV4) para descargar un objeto de S3.
+     * Genera una URL GET firmada (SigV4) para un objeto de S3.
      * Equivalente al `getSignedUrl` del dashboard Node (expira 60 s y fuerza
      * descarga con `response-content-disposition=attachment`).
+     *
+     * Con `$inline` a true se omite ese parámetro: el objeto se sirve en línea
+     * (Content-Type del alta), que es lo que permite previsualizar un PDF en el
+     * navegador sin forzar la descarga.
      */
-    public static function generateDownloadUrl(string $key, int $expires = 60): string
+    public static function generateDownloadUrl(string $key, int $expires = 60, bool $inline = false): string
     {
         $config = self::getConfig();
         $bucket = $config['s3']['bucketName'];
@@ -229,8 +238,10 @@ final class S3Service
             'X-Amz-Date' => $dateTime,
             'X-Amz-Expires' => $expires,
             'X-Amz-SignedHeaders' => 'host',
-            'response-content-disposition' => 'attachment',
         ];
+        if (!$inline) {
+            $queryParams['response-content-disposition'] = 'attachment';
+        }
         ksort($queryParams);
         $canonicalQueryString = http_build_query($queryParams);
 

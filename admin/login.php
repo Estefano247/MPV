@@ -7,6 +7,9 @@ require_once __DIR__ . '/../includes/Database.php';
 require_once __DIR__ . '/../includes/password.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/audit.php';
+require_once __DIR__ . '/../includes/Setup.php';
+
+Setup::ensureDatabase();
 
 if (dashboard_current_user() !== null) {
     header('Location: index.php');

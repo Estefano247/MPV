@@ -8,15 +8,22 @@ require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/dashboard.php';
 require_once __DIR__ . '/../includes/SubmissionRepository.php';
+require_once __DIR__ . '/../includes/SubsanacionService.php';
+require_once __DIR__ . '/../includes/Setup.php';
+
+Setup::ensureDatabase();
 
 $user = dashboard_guard_page();
 
 $config = dashboard_config();
 
 // Filtros (parámetros GET, igual que /api/admin/submissions del dashboard Node)
-$tipo = (string) ($_GET['tipo'] ?? 'credito');
-if (!in_array($tipo, DASHBOARD_ALLOWED_TYPES, true)) {
-    $tipo = 'credito';
+// 'todos' es la vista por defecto: el panel abre mostrando todos los trámites.
+// 'credito' no es un tipo que se persista (alias de 'prestamo-solidario'), así
+// que filtrar por él siempre devolvería cero filas.
+$tipo = (string) ($_GET['tipo'] ?? 'todos');
+if ($tipo !== 'todos' && !in_array($tipo, DASHBOARD_ALLOWED_TYPES, true)) {
+    $tipo = 'todos';
 }
 
 $q = trim((string) ($_GET['q'] ?? ''));
@@ -37,7 +44,7 @@ $page = max(1, (int) ($_GET['pagina'] ?? 1));
 $limit = min(100, max(1, (int) ($_GET['limite'] ?? 10)));
 
 $repo = new SubmissionRepository();
-$filtros = ['tipo' => $tipo, 'buscar' => $q, 'estados' => $statuses];
+$filtros = ['tipo' => ($tipo === 'todos' ? '' : $tipo), 'buscar' => $q, 'estados' => $statuses];
 
 // Conteos por estado (para las tarjetas y la paginación)
 $counts = $repo->contarPorEstado($filtros);
@@ -45,6 +52,7 @@ $counts = $repo->contarPorEstado($filtros);
 $total = (int) array_sum($counts);
 $pendientes = (int) ($counts['pendiente'] ?? 0);
 $enRevision = (int) ($counts['en_revision'] ?? 0);
+$observados = (int) ($counts['observado'] ?? 0);
 $resueltas = (int) (($counts['aprobado'] ?? 0) + ($counts['denegado'] ?? 0));
 
 $totalPages = $total > 0 ? (int) ceil($total / $limit) : 1;
@@ -70,21 +78,24 @@ $mostrandoDesde = $total === 0 ? 0 : $offset + 1;
 $mostrandoHasta = min($offset + $limit, $total);
 
 $stats = [
-    ['label' => 'Total', 'value' => $total, 'color' => 'bg-blue-950'],
-    ['label' => 'Pendientes', 'value' => $pendientes, 'color' => 'bg-amber-500'],
-    ['label' => 'En revisión', 'value' => $enRevision, 'color' => 'bg-blue-500'],
-    ['label' => 'Resueltas', 'value' => $resueltas, 'color' => 'bg-emerald-500'],
+    ['label' => 'Total', 'value' => $total, 'color' => 'bg-blue-950', 'filtro' => null],
+    ['label' => 'Pendientes', 'value' => $pendientes, 'color' => 'bg-amber-500', 'filtro' => 'pendiente'],
+    ['label' => 'En revisión', 'value' => $enRevision, 'color' => 'bg-blue-500', 'filtro' => 'en_revision'],
+    // Los expedientes observados son los que esperan subsanación, así que la
+    // tarjeta filtra por ese estado: es la cola de trabajo del área.
+    ['label' => 'Con observación', 'value' => $observados, 'color' => 'bg-amber-600', 'filtro' => 'observado'],
+    ['label' => 'Resueltas', 'value' => $resueltas, 'color' => 'bg-emerald-500', 'filtro' => 'aprobado,denegado'],
 ];
 
 $tabConfig = [
-    'credito' => 'Crédito',
+    'todos' => 'Todos',
+    'prestamo-solidario' => 'Préstamo Solidario',
     'afiliacion' => 'Afiliación',
     'pre-evaluacion' => 'Pre-evaluación',
     'mpv' => 'Mesa de Partes',
     'auxilio-retiro' => 'Aux. Retiro',
     'auxilio-invalidez' => 'Aux. Invalidez',
     'seguro-sepelio' => 'Sepelio Familiar',
-    'prestamo-solidario' => 'Préstamo Solidario',
     'auxilio-fallecimiento' => 'Aux. Fallecimiento',
 ];
 ?>
@@ -123,14 +134,18 @@ $tabConfig = [
         <!-- Stats -->
         <div class="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             <?php foreach ($stats as $card): ?>
-                <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <?php $tarjeta = $card['filtro'] === null ? 'div' : 'a'; ?>
+                <<?= $tarjeta ?>
+                    <?php if ($tarjeta === 'a'): ?>href="index.php<?= dashboard_query_url(['estado' => $card['filtro'], 'pagina' => '1']) ?>"<?php endif; ?>
+                    class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm<?= $tarjeta === 'a' ? ' transition-colors hover:bg-gray-50' : '' ?>"
+                >
                     <div class="flex items-center gap-3">
                         <div class="flex h-10 w-10 items-center justify-center rounded-lg text-white <?= $card['color'] ?>">
                             <span class="text-lg font-bold"><?= (int) $card['value'] ?></span>
                         </div>
                         <p class="text-sm font-medium text-gray-600"><?= $card['label'] ?></p>
                     </div>
-                </div>
+                </<?= $tarjeta ?>>
             <?php endforeach; ?>
         </div>
 
@@ -153,7 +168,7 @@ $tabConfig = [
                     <input
                         type="search"
                         name="q"
-                        placeholder="Buscar por nombre o DNI..."
+                        placeholder="Buscar por cargo, expediente, nombre o DNI..."
                         value="<?= htmlspecialchars($q, ENT_QUOTES, 'UTF-8') ?>"
                         maxlength="50"
                         class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
@@ -217,7 +232,7 @@ $tabConfig = [
                                     <td class="p-3">
                                         <button
                                             type="button"
-                                            onclick="verArchivos('<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>', <?= json_encode($name) ?>)"
+                                            onclick="verArchivos('<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>', <?= htmlspecialchars((string) json_encode($name), ENT_QUOTES, 'UTF-8') ?>)"
                                             class="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800"
                                         >
                                             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -231,7 +246,7 @@ $tabConfig = [
                                         <div class="flex flex-wrap items-center gap-1.5">
                                             <button
                                                 type="button"
-                                                onclick="verSeguimiento('<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>', <?= json_encode($name) ?>)"
+                                                onclick="verSeguimiento('<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>', <?= htmlspecialchars((string) json_encode($name), ENT_QUOTES, 'UTF-8') ?>)"
                                                 class="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
                                             >
                                                 Seguimiento
@@ -254,7 +269,7 @@ $tabConfig = [
                                     <td class="p-3">
                                         <button
                                             type="button"
-                                            onclick="eliminarSolicitud('<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>', <?= json_encode($name) ?>)"
+                                            onclick="eliminarSolicitud('<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>', <?= htmlspecialchars((string) json_encode($name), ENT_QUOTES, 'UTF-8') ?>)"
                                             class="rounded p-1 text-red-500 hover:bg-red-50"
                                             aria-label="Eliminar solicitud"
                                         >
@@ -376,13 +391,14 @@ $tabConfig = [
             body.innerHTML = '';
             files.forEach((f, i) => {
                 const esImagen = /\.(jpg|jpeg|png|gif|webp)$/i.test(f.originalName) || (f.fileType || '').startsWith('image/');
-                const preview = f.url && esImagen
-                    ? '<a href="' + f.url + '" target="_blank" rel="noopener noreferrer"><img src="' + f.url + '" alt="' + f.originalName.replace(/"/g, '&quot;') + '" class="h-16 w-16 shrink-0 rounded object-cover"></a>'
+                const prevUrl = f.url || f.previewUrl;
+                const preview = prevUrl && esImagen
+                    ? '<a href="' + prevUrl + '" target="_blank" rel="noopener noreferrer"><img src="' + prevUrl + '" alt="' + f.originalName.replace(/"/g, '&quot;') + '" class="h-16 w-16 shrink-0 rounded object-cover"></a>'
                     : '<div class="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-gray-100">' +
                       '<svg class="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
                       '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg></div>';
 
-                const prevBtn = f.url
+                const prevBtn = prevUrl
                     ? '<button type="button" data-i="' + i + '" onclick="window.__adminPrev(this.dataset.i)" class="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Previsualizar</button>'
                     : '';
                 const dir = f.url
@@ -391,8 +407,10 @@ $tabConfig = [
 
                 body.innerHTML += '<div class="flex items-center gap-3 rounded-lg border p-3">'
                     + preview
-                    + '<div class="min-w-0 flex-1"><p class="truncate text-sm font-medium text-gray-900">' + f.originalName + '</p>'
-                    + '<span class="text-xs text-gray-500">' + f.fileType + '</span></div>'
+                    + '<div class="min-w-0 flex-1"><p class="truncate text-sm font-medium text-gray-900">' + esc(f.originalName) + '</p>'
+                    + '<span class="text-xs text-gray-500">' + esc(f.fileType)
+                    + (f.subsanacionId ? ' &middot; <span class="font-medium text-amber-700">subsanación</span>' : '')
+                    + '</span></div>'
                     + prevBtn
                     + dir
                     + '</div>';
@@ -402,19 +420,25 @@ $tabConfig = [
         }
     }
 
-    // Vista previa de archivo (imagen o PDF) dentro del modal de archivos.
+    // Vista previa de archivo dentro del modal de archivos. Las imágenes se
+    // muestran en línea; el resto (p. ej. PDF) abren la URL firmada en una
+    // pestaña nueva, porque S3 la firma con `attachment` y un iframe no la
+    // renderiza.
     window.__adminPrev = function (i) {
         const f = (window.__adminFiles || [])[i];
-        if (!f || !f.url) return;
+        const previewUrl = (f && (f.previewUrl || f.url)) || null;
+        if (!f || !previewUrl) return;
+        const esImagen = (f.fileType || '').startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(f.originalName);
+        if (!esImagen) {
+            window.open(previewUrl, '_blank', 'noopener');
+            return;
+        }
         const body = document.getElementById('modalBody');
         document.getElementById('modalTitulo').textContent = f.originalName || 'Vista previa';
-        const esImagen = (f.fileType || '').startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(f.originalName);
         body.innerHTML = '<div class="mb-3 flex items-center justify-between">'
             + '<button type="button" onclick="verArchivos(window.__adminCtx.id, window.__adminCtx.name)" class="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">&larr; Volver a la lista</button>'
             + '<button type="button" onclick="cerrarModal()" class="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Cerrar</button></div>'
-            + (esImagen
-                ? '<div class="flex justify-center"><img src="' + f.url + '" alt="' + f.originalName.replace(/"/g, '&quot;') + '" class="max-h-[65vh] max-w-full object-contain"></div>'
-                : '<iframe src="' + f.url + '" class="h-[65vh] w-full rounded-lg border"></iframe>');
+            + '<div class="flex justify-center"><img src="' + previewUrl + '" alt="' + f.originalName.replace(/"/g, '&quot;') + '" class="max-h-[65vh] max-w-full object-contain"></div>';
     }
 
     function cerrarModal() {
@@ -426,15 +450,19 @@ $tabConfig = [
     const ESTADO_BADGE = {
         'pendiente': 'bg-amber-100 text-amber-700',
         'en_revision': 'bg-blue-100 text-blue-700',
+        'observado': 'bg-amber-200 text-amber-900',
         'aprobado': 'bg-emerald-100 text-emerald-700',
         'denegado': 'bg-red-100 text-red-700'
     };
     const ESTADO_LABEL = {
         'pendiente': 'Pendiente',
         'en_revision': 'En revisión',
+        'observado': 'Con observación',
         'aprobado': 'Aprobado',
         'denegado': 'Denegado'
     };
+    const PLAZO_MINIMO = <?= SubsanacionService::PLAZO_MINIMO_DIAS ?>;
+    const PLAZO_POR_DEFECTO = <?= SubsanacionService::plazoPorDefecto() ?>;
     let segAreas = [];
 
     async function cargarAreas() {
@@ -463,13 +491,16 @@ $tabConfig = [
             const data = await res.json();
             const exp = data.expediente || {};
             const mov = data.movimientos || [];
+            const observaciones = data.observaciones || [];
+            const subsanaciones = data.subsanaciones || [];
             const areas = await cargarAreas();
+            window.__adminSegCtx = { id: id, name: name };
 
             let timeline = '';
             if (mov.length === 0) {
                 timeline = '<p class="text-sm text-gray-500">Sin movimientos registrados.</p>';
             } else {
-                const tipos = { registro: 'Registro', derivacion: 'Derivación', estado: 'Cambio de estado', resolucion: 'Resolución' };
+                const tipos = { registro: 'Registro', derivacion: 'Derivación', estado: 'Cambio de estado', observacion: 'Observación', subsanacion: 'Subsanación', resolucion: 'Resolución' };
                 timeline = '<ol class="space-y-3">' + mov.map((m, i) => {
                     const last = i === mov.length - 1;
                     return '<li class="relative pl-7">'
@@ -511,7 +542,27 @@ $tabConfig = [
                 + '<h3 class="text-sm font-semibold text-gray-900 mb-2">Movimientos del expediente</h3>'
                 + timeline
                 + '</div>'
+                + panelObservaciones(exp, observaciones, subsanaciones)
                 + derivarForm;
+
+            // Botones del panel de observaciones: se atienden por delegación en
+            // el contenedor, para no meter manejadores dentro del HTML inyectado.
+            const obsEnviar = document.getElementById('obsEnviar');
+            if (obsEnviar) {
+                obsEnviar.addEventListener('click', function () {
+                    registrarObservacion(id, name);
+                });
+            }
+            body.querySelectorAll('[data-sub-aceptar]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    revisarSubsanacion(btn.getAttribute('data-sub-aceptar'), 'aceptada');
+                });
+            });
+            body.querySelectorAll('[data-sub-rechazar]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    revisarSubsanacion(btn.getAttribute('data-sub-rechazar'), 'rechazada');
+                });
+            });
 
             // registrar visualización en auditoría
             // (se registra igual que los archivos: al cargar el detalle)
@@ -524,6 +575,140 @@ $tabConfig = [
         const modal = document.getElementById('modalSeg');
         modal.classList.add('hidden');
         modal.classList.remove('flex');
+    }
+
+    // Escapado de texto que se inyecta en el modal. El detalle de la observación
+    // y la descripción de la subsanación son texto libre del presentante, así que
+    // no se pueden interpolar sin escapar.
+    function esc(s) {
+        return String(s === undefined || s === null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // Panel de observaciones y subsanaciones dentro del modal de seguimiento.
+    function panelObservaciones(exp, observaciones, subsanaciones) {
+        let html = '<div class="rounded-lg border border-gray-200 p-4">'
+            + '<h3 class="text-sm font-semibold text-gray-900 mb-2">Observaciones y subsanaciones</h3>';
+
+        if (observaciones.length === 0 && subsanaciones.length === 0) {
+            html += '<p class="text-sm text-gray-500">Sin observaciones registradas.</p>';
+        }
+
+        observaciones.forEach(function (o) {
+            const vigente = o.estado === 'pendiente';
+            html += '<div class="mb-3 rounded-lg border ' + (vigente ? 'border-amber-200 bg-amber-50' : 'border-gray-200') + ' p-3">'
+                + '<div class="flex flex-wrap items-center justify-between gap-2">'
+                + '<span class="text-xs font-semibold uppercase ' + (vigente ? 'text-amber-800' : 'text-gray-500') + '">'
+                + (vigente ? 'Pendiente de subsanación' : 'Atendida') + '</span>'
+                + '<span class="text-xs text-gray-500">' + esc(o.created_at) + '</span></div>'
+                + '<p class="mt-1 text-sm text-gray-800 whitespace-pre-line">' + esc(o.detalle) + '</p>'
+                + '<p class="mt-2 text-xs text-gray-600">Plazo: ' + esc(o.plazo_dias) + ' días &middot; vence el '
+                + esc(o.fecha_limite)
+                + (vigente && o.vencida ? ' <strong class="text-red-700">(vencido)</strong>' : '')
+                + (o.usuario ? ' &middot; por ' + esc(o.usuario) : '') + '</p>'
+                + '</div>';
+        });
+
+        subsanaciones.forEach(function (s) {
+            const revision = s.estado === 'registrada';
+            html += '<div class="mb-3 rounded-lg border border-gray-200 p-3">'
+                + '<div class="flex flex-wrap items-center justify-between gap-2">'
+                + '<span class="font-mono text-sm font-semibold text-gray-900">' + esc(s.nro_cargo) + '</span>'
+                + '<span class="text-xs font-semibold ' + (s.estado === 'aceptada' ? 'text-emerald-700' : (s.estado === 'rechazada' ? 'text-red-700' : 'text-blue-700')) + '">'
+                + (s.estado === 'aceptada' ? 'Aceptada' : (s.estado === 'rechazada' ? 'Rechazada' : 'En revisión')) + '</span></div>'
+                + '<p class="mt-1 text-sm text-gray-600">' + esc(s.descripcion) + '</p>'
+                + '<p class="mt-1 text-xs text-gray-500">Presentada el ' + esc(s.created_at)
+                + ' &middot; ' + esc(s.archivos) + ' documento(s) por ' + esc(s.nombre) + ' (DNI ' + esc(s.dni) + ')</p>';
+            if (s.observacion_detalle) {
+                html += '<p class="mt-1 text-xs text-gray-500">Responde a: ' + esc(s.observacion_detalle) + '</p>';
+            }
+            if (revision) {
+                html += '<div class="mt-2 flex gap-2">'
+                    + '<button type="button" data-sub-aceptar="' + esc(s.id) + '" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">Aceptar</button>'
+                    + '<button type="button" data-sub-rechazar="' + esc(s.id) + '" class="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">Rechazar</button>'
+                    + '</div>';
+            } else {
+                html += '<p class="mt-1 text-xs text-gray-400">Revisada'
+                    + (s.revisada_por ? ' por ' + esc(s.revisada_por) : '')
+                    + (s.revisada_at ? ' el ' + esc(s.revisada_at) : '') + '</p>';
+            }
+            html += '</div>';
+        });
+
+        if (exp.puede_observar) {
+            html += '<div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">'
+                + '<h4 class="text-sm font-semibold text-amber-900 mb-2">Registrar observación</h4>'
+                + '<p class="mb-2 text-xs text-amber-800">Le informa al presentante qué le falta y abre el plazo para que lo subsane.</p>'
+                + '<textarea id="obsDetalle" rows="3" maxlength="1000" placeholder="Detalle de lo observado (máx. 1000 caracteres)" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"></textarea>'
+                + '<div class="mt-2 flex flex-wrap items-center gap-2">'
+                + '<label for="obsPlazo" class="text-xs text-amber-900">Plazo (días)</label>'
+                + '<input id="obsPlazo" type="number" min="' + PLAZO_MINIMO + '" max="90" value="' + PLAZO_POR_DEFECTO + '" class="w-24 rounded-lg border border-gray-300 px-2 py-1 text-sm">'
+                + '<button type="button" id="obsEnviar" class="rounded-lg bg-amber-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-amber-700">Registrar observación</button>'
+                + '</div></div>';
+        } else if (exp.status === 'observado') {
+            html += '<p class="mt-3 text-xs text-gray-500">El expediente ya tiene una observación vigente. '
+                + 'Para retirarla, use el selector de estado y elija "Volver a revisión".</p>';
+        }
+
+        html += '</div>';
+        return html;
+    }
+
+    async function registrarObservacion(id, name) {
+        const detalle = document.getElementById('obsDetalle').value.trim();
+        const plazo = parseInt(document.getElementById('obsPlazo').value, 10);
+        if (detalle === '') { window.alert('Escriba el detalle de la observación.'); return; }
+        const btn = document.getElementById('obsEnviar');
+        btn.disabled = true;
+        btn.textContent = 'Registrando...';
+        try {
+            const res = await fetch('api/observacion.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id, detalle: detalle, plazoDias: plazo })
+            });
+            if (res.status === 401) { window.location.href = 'login.php'; return; }
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const detalleErr = (data.details && data.details.length) ? (': ' + data.details.join(' | ')) : '';
+                window.alert((data.error || 'Error al registrar la observación') + detalleErr);
+                btn.disabled = false;
+                btn.textContent = 'Registrar observación';
+                return;
+            }
+            window.alert(data.message || 'Observación registrada.');
+            cerrarModalSeg();
+            window.location.reload();
+        } catch {
+            window.alert('Error al registrar la observación');
+            btn.disabled = false;
+            btn.textContent = 'Registrar observación';
+        }
+    }
+
+    async function revisarSubsanacion(subsanacionId, decision) {
+        if (decision === 'rechazada'
+            && !window.confirm('¿Rechazar la subsanación? El requerimiento se mantiene con un plazo nuevo.')) {
+            return;
+        }
+        try {
+            const res = await fetch('api/subsanacion.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: subsanacionId, decision: decision })
+            });
+            if (res.status === 401) { window.location.href = 'login.php'; return; }
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                window.alert(data.error || 'Error al revisar la subsanación');
+                return;
+            }
+            window.alert(data.message || 'Subsanación revisada.');
+            window.location.reload();
+        } catch {
+            window.alert('Error al revisar la subsanación');
+        }
     }
 
     async function derivar(id) {
