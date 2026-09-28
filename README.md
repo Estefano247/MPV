@@ -47,7 +47,7 @@ La plataforma funciona como Mesa de Partes Virtual de la entidad e incorpora:
 ## Requisitos
 
 - PHP ≥ 8.1 con extensiones: `pdo_pgsql`, `pgsql`, `curl`, `openssl`, `mbstring`
-- Servidor web (Apache/nginx) o el servidor embebido de PHP
+- Servidor web: el de la imagen es el embebido de PHP con `docker/router.php`
 - PostgreSQL (solo para grafos de solicitudes; configuración en `DATABASE_URL`)
 
 O bien, nada de lo anterior: **Docker Desktop** y `docker compose up -d --build`
@@ -84,7 +84,7 @@ solicitud o al consultar las páginas MPV.
 
 ## Puesta en marcha con Docker (recomendado)
 
-Levanta PHP 8.3 + Apache y PostgreSQL 16 sin instalar nada en el sistema. La
+Levanta PHP 8.3 (servidor embebido) y PostgreSQL 16 sin instalar nada en el sistema. La
 única cosa que tienes que tener lista es el `.env` con las credenciales de AWS,
 que ya existe en este proyecto.
 
@@ -108,13 +108,13 @@ impide). Solo se inyectan como variables de entorno en tiempo de ejecución.
 3. Los escribe en `/var/www/html/.env` en modo `640 root:www-data`, para que
    también los vean los scripts CLI (`docker compose exec app php ...`).
 4. Aplica el esquema y crea el usuario admin si hay `SEED_ADMIN_PASSWORD`.
-5. Arranca Apache.
+5. Arranca el servidor embebido de PHP con el router.
 
 > **No uses `docker compose down -v`.** El flag `-v` borra el volumen `appdata` y
 > con él las llaves de cifrado. Todo lo cifrado con `APP_DATA_KEY` deja de poder
 > descifrarse. Para reiniciar limpio se usa `docker compose down` a secas.
 
-El `.env` que escribe el contenedor queda en el docroot, pero Apache lo bloquea:
+El `.env` que escribe el contenedor queda en el docroot, pero el router lo bloquea:
 `GET /.env` responde **403**, igual que `includes/`, `tests/`, `bin/`,
 `schema.sql` y `admin/AUDITORIA.md`. No es un `.env` de desarrollo, es un
 `.env` generado en cada arranque y controlado por permisos.
@@ -142,16 +142,16 @@ apunta a un bucket de pruebas, no al de producción.
 
 ## Despliegue en Railway (con Docker)
 
-Railway construye el **Dockerfile de la raíz** directamente (PHP 8.3 + Apache,
-las mismas extensiones y el mismo vhost que en local). Nada de Railpack, Caddy ni
-Composer: la imagen es una sola, para local y para el despliegue, y el arranque es
-el mismo `docker/entrypoint.sh`.
+Railway construye el **Dockerfile de la raíz** directamente (PHP 8.3, servidor
+embebido, las mismas extensiones y el mismo router que en local). Nada de Apache,
+nginx, Railpack, Caddy ni Composer: la imagen es una sola, para local y para el
+despliegue, y el arranque es el mismo `docker/entrypoint.sh`.
 
 **Qué hace el entrypoint en el despliegue:** saca el host/puerto del PostgreSQL
 de `DATABASE_URL` (cuando no hay `DB_HOST` explícito), espera a que responda,
 deja las llaves de cifrado, aplica el esquema y siembra el admin
-(`Setup::ensureDatabase()`), reconfigura Apache para escuchar en `$PORT` (la
-variable de Railway) y arranca Apache.
+(`Setup::ensureDatabase()`) y arranca el servidor embebido en `$PORT` (la variable
+que inyecta Railway).
 
 **Variables de entorno en Railway:**
 
@@ -169,13 +169,14 @@ variable de Railway) y arranca Apache.
 2. Copiar el `DATABASE_URL` del plugin a la variable `DATABASE_URL`.
 3. Añadir el resto de variables (tabla anterior). Sin `APP_DATA_KEY`/`JWT_SECRET`
    el entrypoint los genera en el primer arranque y se quedan en el volumen.
-4. Dejar `Start Command` vacío y `Deploy` en automático. Railway conecta `$PORT`
-   y el entrypoint mueve Apache a ese puerto.
+4. Dejar `Start Command` vacío y `Deploy` en automático. Railway inyecta `$PORT`
+   (8080) y el CMD de la imagen arranca el servidor en ese puerto.
 
-**Qué no se sirve por HTTP** — el vhost de Apache en la imagen
-(`docker/apache-vhost.conf`) devuelve 403 en `/includes/`, `/docs/`, `/tests/`,
-`/bin/`, `/docker/`, `/vendor/`, `.git/`, `.env*` y los `.sql/.md/.log...`, igual
-que local. La app no separa público de privado, esta configuración es la barrera.
+**Qué no se sirve por HTTP** — `docker/router.php` devuelve 403 en `/includes/`,
+`/docs/`, `/tests/`, `/bin/`, `/docker/`, `/vendor/`, `/.git/`, `.env*` y los
+`.sql/.md/.log/.ini...`, igual que local. La app no separa público de privado,
+esta configuración es la barrera. El router vive fuera del docroot
+(`/usr/local/bin/router.php`) para que tampoco se pueda pedir por URL.
 
 **Notas**
 - Sin `SEED_ADMIN_*`, el panel arranca igual: los `users` se crean desde
@@ -408,7 +409,7 @@ Resumen:
 ```
 /solicitudes
 ├── .env                    # Variables reales (NO commiterar)
-├── Dockerfile             # Imagen PHP 8.3 + Apache (local y Railway)
+├── Dockerfile             # Imagen PHP 8.3, servidor embebido (local y Railway)
 ├── index.php              # Simulador de préstamo
 ├── login.php              # Portal del asociado (DNI + fecha nacimiento)
 ├── afiliacion.php         # Redirige a la MPV (trámite de afiliación)
@@ -423,11 +424,11 @@ Resumen:
 ├── schema.sql             # Esquema único de la BD (solicitudes, MPV, panel, auditoría)
 ├── mpv/                   # Mesa de Partes Virtual
 │   └── index.php          #   Formulario unificado (9 trámites, ?tipo=, requisitos)
-├── docker/                # Soporte de la imagen (entrypoint y vhost)
+├── docker/                # Soporte de la imagen (entrypoint y router)
 │   ├── entrypoint.sh      #   Espera la BD (DATABASE_URL o DB_HOST), aplica esquema,
-│   │                      #   deja APP_DATA_KEY/JWT_SECRET y mueve Apache a $PORT
-│   ├── apache-vhost.conf  #   Vhost: bloquea includes/, .env, .sql/.md...
-│   └── php-dev.ini        #   PHP para desarrollo local
+│   │                      #   deja APP_DATA_KEY/JWT_SECRET y arranca el servidor
+│   ├── router.php         #   Router del servidor embebido: bloquea includes/, .env...
+│   └── php-dev.ini        #   PHP (UTF-8, sesiones fuera del docroot, límites)
 ├── bin/                   # CLI solo local (check-env, migrate)
 ├── docs/                  # Documentación institucional en Markdown (no se sirve por HTTP)
 │   ├── directiva.md
