@@ -28,16 +28,19 @@ final class Setup
     {
         $db = Database::getConnection();
 
-        if (self::esquemaExiste($db)) {
-            return;
+        if (!self::esquemaExiste($db)) {
+            $schemaFile = __DIR__ . '/../schema.sql';
+            if (!is_file($schemaFile)) {
+                throw new RuntimeException('No se encontró schema.sql en ' . $schemaFile);
+            }
+            $db->exec((string) file_get_contents($schemaFile));
         }
 
-        $schemaFile = __DIR__ . '/../schema.sql';
-        if (!is_file($schemaFile)) {
-            throw new RuntimeException('No se encontró schema.sql en ' . $schemaFile);
-        }
-        $db->exec((string) file_get_contents($schemaFile));
-
+        // El seed va SIEMPRE, no solo cuando se crea el esquema: si el primer
+        // arranque ocurrió sin SEED_ADMIN_PASSWORD (Railway, primer deploy sin
+        // variables) el esquema quedó creado pero sin usuario, y con el seed atado
+        // a la creación del esquema ese usuario nunca aparecía. Es un SELECT
+        // barato, el precio lo paga cada request.
         self::seedAdmin($db);
     }
 
