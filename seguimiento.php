@@ -13,6 +13,21 @@ require_once __DIR__ . '/includes/DataProtector.php';
 require_once __DIR__ . '/includes/SubsanacionService.php';
 
 session_name('AMSP_CLIENTE');
+ini_set('session.cookie_httponly', '1');
+ini_set('session.cookie_samesite', 'Lax');
+ini_set('session.use_strict_mode', '1');
+$esHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['SERVER_PORT'] ?? '') === '443')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+ini_set('session.cookie_secure', $esHttps ? '1' : '0');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => $_SERVER['HTTP_HOST'] ?? '',
+    'secure' => $esHttps,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 session_start();
 
 $mpv = $config['mpv'];
@@ -192,9 +207,8 @@ if (($consulta !== '' || $dni !== '') && $_SERVER['REQUEST_METHOD'] === 'POST') 
                                     <p class="mt-2 text-sm text-gray-600"><?= e((string) $sb['descripcion']) ?></p>
                                     <p class="mt-2 text-xs text-gray-500">
                                         Presentada el <?= e(AcuseService::formatearFecha((string) $sb['created_at'])) ?>
-                                        <?php if ((string) ($sb['revisada_por'] ?? '') !== ''): ?>
-                                            &middot; revisada por <?= e((string) $sb['revisada_por']) ?>
-                                            el <?= e(AcuseService::formatearFecha((string) $sb['revisada_at'])) ?>
+                                        <?php if ((string) ($sb['revisada_at'] ?? '') !== ''): ?>
+                                            &middot; revisada el <?= e(AcuseService::formatearFecha((string) $sb['revisada_at'])) ?>
                                         <?php endif; ?>
                                     </p>
                                 </div>
@@ -233,7 +247,6 @@ if (($consulta !== '' || $dni !== '') && $_SERVER['REQUEST_METHOD'] === 'POST') 
                                     <p class="text-xs text-gray-500">
                                         <?php if ((string) $m['de_area'] !== ''): ?>De: <?= e((string) $m['de_area']) ?> &rarr; <?php endif; ?>
                                         <?php if ((string) $m['a_area'] !== ''): ?>A: <?= e((string) $m['a_area']) ?><?php endif; ?>
-                                        <?php if ((string) $m['usuario'] !== ''): ?>&middot; por <?= e((string) $m['usuario']) ?><?php endif; ?>
                                     </p>
                                 </li>
                             <?php endforeach; ?>

@@ -67,9 +67,16 @@ if (!isset($GLOBALS['__solicitudes_config'])) {
             'sessionDurationHours' => (int) solicitudes_env('SESSION_DURATION_HOURS', 24),
         ],
         'seed' => [
-            'adminUsername' => (string) solicitudes_env('SEED_ADMIN_USERNAME', '@dm1n'),
+            // Dos usuarios del panel (schema.sql los siembra con Admin@2026 y
+            // Setup::seedUsuarios() reescribe el hash desde estas variables):
+            //   admin   -> SEED_ADMIN_* (super-admin, acceso total)
+            //   staff   -> SEED_STAFF_*  (admin, operación del panel)
+            'adminUsername' => (string) solicitudes_env('SEED_ADMIN_USERNAME', 'superadmin'),
             'adminPassword' => (string) solicitudes_env('SEED_ADMIN_PASSWORD', ''),
             'adminRole' => (string) solicitudes_env('SEED_ADMIN_ROLE', 'super-admin'),
+            'staffUsername' => (string) solicitudes_env('SEED_STAFF_USERNAME', 'admin'),
+            'staffPassword' => (string) solicitudes_env('SEED_STAFF_PASSWORD', ''),
+            'staffRole' => (string) solicitudes_env('SEED_STAFF_ROLE', 'admin'),
         ],
         'data' => [
             // Clave de cifrado de datos personales en reposo (hex de 32 bytes, AES-256-GCM).

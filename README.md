@@ -208,7 +208,6 @@ Con Apache/nginx, apuntar el docroot a `migracion-app/` y acceder a
 |---|---|
 | `/solicitudes/` | Simulador de préstamo (calculadora) |
 | `/solicitudes/afiliacion.php` | Redirige a la MPV (`mpv/index.php?tipo=afiliacion`) |
-| `/solicitudes/calculadora.php` | Calculadora de préstamos |
 | `/solicitudes/guardar.php` | POST: persevera la solicitud en PostgreSQL |
 | `/solicitudes/upload-url.php` | POST: genera URL S3 firmada para el adjunto |
 | `/solicitudes/mpv/` | **Mesa de Partes Virtual** (formulario + transparencia) |
@@ -324,9 +323,11 @@ el mismo bucket S3.
   Pre-evaluación / Mesa de Partes), búsqueda por nombre o DNI, paginación, tarjetas
   de resumen, vista de archivos (URLs S3 firmadas), **seguimiento y derivación**,
   y acciones de estado/eliminación.
-- `admin/api/*.php` — Endpoints JSON del panel (me, files, status, delete, areas,
-  seguimiento, derivar), con `bootstrap.php` como carga común. `derivar.php` exige
-  rol `admin`/`super-admin` y registra el movimiento en `movimientos` y la
+- `admin/api/*.php` — Endpoints JSON del panel: `me`, `areas`, `files`,
+  `seguimiento`, `status`, `delete`, `derivar`, `observacion` y `subsanacion`,
+  con `bootstrap.php` como carga común. `bootstrap.php` no es una ruta: si se
+  pide directamente responde **404**. `derivar.php` exige rol
+  `admin`/`super-admin` y registra el movimiento en `movimientos` y en la
   auditoría.
 - `admin/auditoria.php` — Bitácora de auditoría de operaciones del panel.
 - `admin/setup.php` — Crea el esquema completo (`schema.sql`) y el admin inicial.

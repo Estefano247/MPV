@@ -12,6 +12,21 @@ require_once __DIR__ . '/includes/AcuseService.php';
 require_once __DIR__ . '/includes/auth.php';
 
 session_name('AMSP_CLIENTE');
+ini_set('session.cookie_httponly', '1');
+ini_set('session.cookie_samesite', 'Lax');
+ini_set('session.use_strict_mode', '1');
+$esHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['SERVER_PORT'] ?? '') === '443')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+ini_set('session.cookie_secure', $esHttps ? '1' : '0');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => $_SERVER['HTTP_HOST'] ?? '',
+    'secure' => $esHttps,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 session_start();
 
 $mpv = $config['mpv'];

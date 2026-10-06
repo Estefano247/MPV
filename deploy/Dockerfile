@@ -1,10 +1,11 @@
-# Imagen de la Mesa de Partes Virtual (PHP 8.3) para el entorno local
-# (`docker compose up -d --build`) y para el despliegue en Railway, que construye
-# este Dockerfile de la raíz.
+# Imagen de la Mesa de Partes Virtual (PHP 8.3) para el entorno local y para el
+# despliegue con Docker. Vive en deploy/ para que la raíz del repo sea solo PHP,
+# .env y SQL: el contexto de build es la raíz (context: .. en docker-compose.yml).
 #
-# El servidor web es el embebido de PHP (`php -S` con docker/router.php). No hay
+# El servidor web es el embebido de PHP (`php -S` con deploy/router.php). No hay
 # Apache ni nginx: la barrera de seguridad (bloquear includes/, tests/, .env...)
-# la aplica el router, en PHP. Menos piezas, menos configuración.
+# la aplica el router, en PHP. Menos piezas, menos configuración. En cPanel esa
+# misma barrera la pone .htaccess de la raíz.
 #
 # La app es PHP sin framework ni Composer: no hay `composer install` que hacer.
 # Lo que sí hay que resolver es el conjunto de extensiones que el código usa de
@@ -36,10 +37,10 @@ RUN set -eux; \
 # El código envía cabeceras CSP propias y devuelve JSON; se fuerza UTF-8 para no
 # depender de la configuración regional de la imagen base. sessions fuera del
 # docroot, errores a stderr y límites holgados para los adjuntos.
-COPY docker/php-dev.ini /usr/local/etc/php/conf.d/zz-app.ini
+COPY deploy/php-dev.ini /usr/local/etc/php/conf.d/zz-app.ini
 
 # El router va fuera del docroot para que no se pueda pedir por URL.
-COPY docker/router.php /usr/local/bin/router.php
+COPY deploy/router.php /usr/local/bin/router.php
 
 # El código va en el docroot, pero la app no separa público de privado: no hay
 # un directorio public/. El router se encarga de cerrar includes/, docs/, tests/
@@ -52,7 +53,7 @@ ENV PHP_CLI_SERVER_WORKERS=8
 
 # Primero los archivos que casi no cambian, para que la capa quede cacheada y
 # reconstruir tras editar un .php no reinstale las extensiones.
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint
+COPY deploy/entrypoint.sh /usr/local/bin/entrypoint
 COPY bin/ /var/www/html/bin/
 COPY schema.sql /var/www/html/schema.sql
 COPY includes/ /var/www/html/includes/
@@ -62,7 +63,7 @@ COPY admin/ /var/www/html/admin/
 COPY mpv/ /var/www/html/mpv/
 COPY index.php login.php seguimiento.php guardar.php acuse.php \
      afiliacion.php mis-solicitudes.php upload-url.php subsanacion.php \
-     guardar-subsanacion.php .env.example /var/www/html/
+     guardar-subsanacion.php .env.example .htaccess .user.ini /var/www/html/
 
 # Los .php se leen en cada request, así que la propiedad es de www-data.
 RUN chmod +x /usr/local/bin/entrypoint /usr/local/bin/router.php \

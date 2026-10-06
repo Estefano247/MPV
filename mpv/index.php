@@ -9,6 +9,21 @@ require_once __DIR__ . '/../includes/View.php';
 $mpv = $config['mpv'];
 
 session_name('AMSP_CLIENTE');
+ini_set('session.cookie_httponly', '1');
+ini_set('session.cookie_samesite', 'Lax');
+ini_set('session.use_strict_mode', '1');
+$esHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['SERVER_PORT'] ?? '') === '443')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+ini_set('session.cookie_secure', $esHttps ? '1' : '0');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => $_SERVER['HTTP_HOST'] ?? '',
+    'secure' => $esHttps,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 session_start();
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -357,10 +372,25 @@ if (!in_array($tipoInicial, $tiposPermitidos, true)) {
         return document.getElementById('mpvTipo').value;
     }
 
+    // Escapado para todo lo que se inyecta en innerHTML. El nombre del archivo
+    // lo elige el presentante, así que sin esto un fichero llamado
+    // "<img src=x onerror=...>.pdf" ejecuta JS en el portal.
+    function mpvEsc(s) {
+        return String(s === undefined || s === null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function mpvMsg(type, text) {
+        mpvMsgHtml(type, mpvEsc(text));
+    }
+
+    // Variante para mensajes que SÍ llevan marcado propio (<strong>, <a>).
+    // Los trozos de datos van escapados a mano por quien arma el HTML.
+    function mpvMsgHtml(type, html) {
         const el = document.getElementById('mpvMessage');
         el.className = 'flex items-center gap-2 rounded-lg p-3 text-sm ' + (type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800');
-        el.innerHTML = text;
+        el.innerHTML = html;
         el.classList.remove('hidden');
     }
 
@@ -380,16 +410,17 @@ if (!in_array($tipoInicial, $tiposPermitidos, true)) {
         list.innerHTML = keys.map(k => {
             const d = mpvDocs[k];
             const f = d.file;
+            const kc = mpvEsc(k);
             const tile = mpvEsImagen(f)
-                ? '<button type="button" onclick="window.__mpvPreview(\'' + k + '\')" class="h-12 w-12 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-gray-200" title="Previsualizar">'
-                    + '<img src="' + d.url + '" alt="" class="h-full w-full object-cover"></button>'
+                ? '<button type="button" onclick="window.__mpvPreview(\'' + kc + '\')" class="h-12 w-12 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-gray-200" title="Previsualizar">'
+                    + '<img src="' + mpvEsc(d.url) + '" alt="" class="h-full w-full object-cover"></button>'
                 : '<div class="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600"><span class="text-[9px] font-bold leading-none">PDF</span></div>';
             return '<li class="flex items-center gap-3 rounded-lg border bg-white px-3 py-2.5">'
                 + tile
-                + '<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 truncate">' + f.name + '</p>'
+                + '<div class="flex-1 min-w-0"><p class="text-sm font-medium text-gray-900 truncate">' + mpvEsc(f.name) + '</p>'
                 + '<p class="text-xs text-gray-400">' + mpvTamano(f.size) + '</p></div>'
-                + '<button type="button" onclick="window.__mpvPreview(\'' + k + '\')" class="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">Previsualizar</button>'
-                + '<button type="button" onclick="window.__mpvQuitar(\'' + k + '\')" class="shrink-0 text-xs font-medium text-red-500 hover:text-red-700 p-1">Quitar</button></li>';
+                + '<button type="button" onclick="window.__mpvPreview(\'' + kc + '\')" class="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">Previsualizar</button>'
+                + '<button type="button" onclick="window.__mpvQuitar(\'' + kc + '\')" class="shrink-0 text-xs font-medium text-red-500 hover:text-red-700 p-1">Quitar</button></li>';
         }).join('');
         mpvActualizar();
     }
@@ -407,8 +438,8 @@ if (!in_array($tipoInicial, $tiposPermitidos, true)) {
         document.getElementById('mpvPrevTitulo').textContent = d.file.name;
         const body = document.getElementById('mpvPrevBody');
         body.innerHTML = mpvEsImagen(d.file)
-            ? '<div class="flex min-h-full items-center justify-center"><img src="' + d.url + '" alt="" class="max-h-full max-w-full object-contain"></div>'
-            : '<iframe src="' + d.url + '" class="h-full w-full border-0"></iframe>';
+            ? '<div class="flex min-h-full items-center justify-center"><img src="' + mpvEsc(d.url) + '" alt="" class="max-h-full max-w-full object-contain"></div>'
+            : '<iframe src="' + mpvEsc(d.url) + '" class="h-full w-full border-0"></iframe>';
         document.getElementById('mpvPrev').classList.remove('hidden');
         document.getElementById('mpvPrev').classList.add('flex');
     }
@@ -552,9 +583,9 @@ if (!in_array($tipoInicial, $tiposPermitidos, true)) {
             const continuar = tipo === 'pre-evaluacion'
                 ? '<br>Puede continuar con su <a class="underline" href="index.php?tipo=credito">Solicitud de Crédito</a>.'
                 : '';
-            mpvMsg('success',
-                'Trámite registrado con <strong>Nº de cargo ' + acuse.nroCargo + '</strong> y expediente '
-                + (acuse.nroExpediente || '') + '. ' + acuseLink + continuar);
+            mpvMsgHtml('success',
+                'Trámite registrado con <strong>Nº de cargo ' + mpvEsc(acuse.nroCargo) + '</strong> y expediente '
+                + mpvEsc(acuse.nroExpediente || '') + '. ' + acuseLink + continuar);
             document.getElementById('mpvForm').reset();
             mpvAplicarTipo();
             for (const k in mpvDocs) if (mpvDocs[k].url) URL.revokeObjectURL(mpvDocs[k].url);

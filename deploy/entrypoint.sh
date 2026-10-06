@@ -109,7 +109,7 @@ export APP_DATA_KEY JWT_SECRET
 ENV_FILE=/var/www/html/.env
 umask 0027
 cat > "$ENV_FILE" <<EOF
-# Generado por docker/entrypoint.sh en cada arranque.
+# Generado por deploy/entrypoint.sh en cada arranque.
 # No editar a mano: se sobrescribe.
 # Solo contiene las llaves que genera el contenedor. AWS, base de datos y los
 # datos institucionales llegan como variables de entorno de docker-compose.

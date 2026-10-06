@@ -393,7 +393,7 @@ $tabConfig = [
                 const esImagen = /\.(jpg|jpeg|png|gif|webp)$/i.test(f.originalName) || (f.fileType || '').startsWith('image/');
                 const prevUrl = f.url || f.previewUrl;
                 const preview = prevUrl && esImagen
-                    ? '<a href="' + prevUrl + '" target="_blank" rel="noopener noreferrer"><img src="' + prevUrl + '" alt="' + f.originalName.replace(/"/g, '&quot;') + '" class="h-16 w-16 shrink-0 rounded object-cover"></a>'
+                    ? '<a href="' + esc(prevUrl) + '" target="_blank" rel="noopener noreferrer"><img src="' + esc(prevUrl) + '" alt="' + esc(f.originalName) + '" class="h-16 w-16 shrink-0 rounded object-cover"></a>'
                     : '<div class="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-gray-100">' +
                       '<svg class="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
                       '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg></div>';
@@ -402,7 +402,7 @@ $tabConfig = [
                     ? '<button type="button" data-i="' + i + '" onclick="window.__adminPrev(this.dataset.i)" class="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Previsualizar</button>'
                     : '';
                 const dir = f.url
-                    ? '<a href="' + f.url + '" target="_blank" rel="noopener noreferrer" class="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Descargar</a>'
+                    ? '<a href="' + esc(f.url) + '" target="_blank" rel="noopener noreferrer" class="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Descargar</a>'
                     : '';
 
                 body.innerHTML += '<div class="flex items-center gap-3 rounded-lg border p-3">'
@@ -438,7 +438,7 @@ $tabConfig = [
         body.innerHTML = '<div class="mb-3 flex items-center justify-between">'
             + '<button type="button" onclick="verArchivos(window.__adminCtx.id, window.__adminCtx.name)" class="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">&larr; Volver a la lista</button>'
             + '<button type="button" onclick="cerrarModal()" class="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Cerrar</button></div>'
-            + '<div class="flex justify-center"><img src="' + previewUrl + '" alt="' + f.originalName.replace(/"/g, '&quot;') + '" class="max-h-[65vh] max-w-full object-contain"></div>';
+            + '<div class="flex justify-center"><img src="' + esc(previewUrl) + '" alt="' + esc(f.originalName) + '" class="max-h-[65vh] max-w-full object-contain"></div>';
     }
 
     function cerrarModal() {
@@ -505,15 +505,15 @@ $tabConfig = [
                     const last = i === mov.length - 1;
                     return '<li class="relative pl-7">'
                         + '<span class="absolute left-0 top-1 h-3.5 w-3.5 rounded-full ring-4 ring-white ' + (last ? 'bg-blue-600' : 'bg-gray-300') + '"></span>'
-                        + '<p class="text-sm font-semibold text-gray-900">' + (tipos[m.tipo] || m.tipo) + ' <span class="ml-1 text-xs font-normal text-gray-400">' + m.created_at + '</span></p>'
-                        + '<p class="text-sm text-gray-600">' + m.descripcion + '</p>'
-                        + '<p class="text-xs text-gray-500">' + (m.de_area ? 'De: ' + m.de_area + ' &rarr; ' : '') + (m.a_area ? 'A: ' + m.a_area + ' ' : '') + (m.usuario ? '&middot; por ' + m.usuario : '') + '</p>'
+                        + '<p class="text-sm font-semibold text-gray-900">' + esc(tipos[m.tipo] || m.tipo) + ' <span class="ml-1 text-xs font-normal text-gray-400">' + esc(m.created_at) + '</span></p>'
+                        + '<p class="text-sm text-gray-600">' + esc(m.descripcion) + '</p>'
+                        + '<p class="text-xs text-gray-500">' + (m.de_area ? 'De: ' + esc(m.de_area) + ' &rarr; ' : '') + (m.a_area ? 'A: ' + esc(m.a_area) + ' ' : '') + (m.usuario ? '&middot; por ' + esc(m.usuario) : '') + '</p>'
                         + '</li>';
                 }).join('') + '</ol>';
             }
 
             const enabled = exp.status !== 'aprobado' && exp.status !== 'denegado';
-            const areaOptions = '<option value="">Seleccione área de destino</option>' + areas.map(a => '<option value="' + a.id + '">' + a.nombre + '</option>').join('');
+            const areaOptions = '<option value="">Seleccione área de destino</option>' + areas.map(a => '<option value="' + esc(a.id) + '">' + esc(a.nombre) + '</option>').join('');
             const derivarForm = enabled
                 ? '<div class="rounded-lg border border-gray-200 p-4">'
                     + '<h3 class="text-sm font-semibold text-gray-900 mb-2">Derivar expediente</h3>'
@@ -529,14 +529,14 @@ $tabConfig = [
             body.innerHTML =
                 '<div class="rounded-lg border border-gray-200 p-4">'
                 + '<div class="flex flex-wrap items-center justify-between gap-2">'
-                + '<div><p class="font-mono text-sm font-bold text-blue-900">' + exp.nro_cargo + ' &middot; ' + exp.nro_expediente + '</p>'
-                + '<p class="text-xs text-gray-500">' + exp.tipo_label + ' &middot; ' + exp.name + ' &middot; DNI ' + exp.dni + '</p></div>'
+                + '<div><p class="font-mono text-sm font-bold text-blue-900">' + esc(exp.nro_cargo) + ' &middot; ' + esc(exp.nro_expediente) + '</p>'
+                + '<p class="text-xs text-gray-500">' + esc(exp.tipo_label) + ' &middot; ' + esc(exp.name) + ' &middot; DNI ' + esc(exp.dni) + '</p></div>'
                 + '<a href="' + acuseUrl + '" target="_blank" class="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Ver acuse</a>'
                 + '</div>'
                 + '<div class="mt-3 flex flex-wrap gap-4 text-sm">'
-                + '<div><span class="text-xs text-gray-500 uppercase">Estado</span><p><span class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ' + (ESTADO_BADGE[exp.status] || 'bg-gray-100 text-gray-700') + '">' + (ESTADO_LABEL[exp.status] || exp.status) + '</span></p></div>'
-                + '<div><span class="text-xs text-gray-500 uppercase">Área actual</span><p class="font-medium">' + (exp.area_actual || 'Mesa de Partes') + '</p></div>'
-                + '<div><span class="text-xs text-gray-500 uppercase">Presentación</span><p class="font-medium">' + exp.fecha + '</p></div>'
+                + '<div><span class="text-xs text-gray-500 uppercase">Estado</span><p><span class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ' + (ESTADO_BADGE[exp.status] || 'bg-gray-100 text-gray-700') + '">' + (ESTADO_LABEL[exp.status] || esc(exp.status)) + '</span></p></div>'
+                + '<div><span class="text-xs text-gray-500 uppercase">Área actual</span><p class="font-medium">' + esc(exp.area_actual || 'Mesa de Partes') + '</p></div>'
+                + '<div><span class="text-xs text-gray-500 uppercase">Presentación</span><p class="font-medium">' + esc(exp.fecha) + '</p></div>'
                 + '</div></div>'
                 + '<div class="rounded-lg border border-gray-200 p-4">'
                 + '<h3 class="text-sm font-semibold text-gray-900 mb-2">Movimientos del expediente</h3>'

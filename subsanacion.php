@@ -11,6 +11,21 @@ require_once __DIR__ . '/includes/ObservacionRepository.php';
 require_once __DIR__ . '/includes/SubsanacionService.php';
 
 session_name('AMSP_CLIENTE');
+ini_set('session.cookie_httponly', '1');
+ini_set('session.cookie_samesite', 'Lax');
+ini_set('session.use_strict_mode', '1');
+$esHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['SERVER_PORT'] ?? '') === '443')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+ini_set('session.cookie_secure', $esHttps ? '1' : '0');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => $_SERVER['HTTP_HOST'] ?? '',
+    'secure' => $esHttps,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 session_start();
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -281,11 +296,26 @@ $plazoSugerido = SubsanacionService::plazoPorDefecto();
     input.style.display = 'none';
     document.body.appendChild(input);
 
+    // Escapado para todo lo que se inyecta en innerHTML. El nombre del archivo
+    // lo elige el presentante: sin esto un fichero con HTML/JS en el nombre
+    // se ejecuta en su propio navegador (y en el de quien lo reabra).
+    function esc(s) {
+        return String(s === undefined || s === null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function mostrar(tipo, texto) {
+        mostrarHtml(tipo, esc(texto));
+    }
+
+    // Variante para mensajes que SÍ llevan marcado propio (<strong>, <a>):
+    // los trozos de datos van escapados a mano por quien arma el HTML.
+    function mostrarHtml(tipo, html) {
         const el = document.getElementById('subMessage');
         el.className = 'flex items-center gap-2 rounded-lg p-3 text-sm '
             + (tipo === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800');
-        el.innerHTML = texto;
+        el.innerHTML = html;
         el.classList.remove('hidden');
     }
 
@@ -295,8 +325,8 @@ $plazoSugerido = SubsanacionService::plazoPorDefecto();
         list.innerHTML = claves.map(function (clave) {
             const f = docs[clave];
             return '<li class="flex items-center gap-3 rounded-lg border bg-white px-3 py-2.5">'
-                + '<div class="flex-1 min-w-0"><p class="text-sm font-medium truncate">' + f.name + '</p></div>'
-                + '<button type="button" data-quitar="' + clave + '" class="shrink-0 text-xs font-medium text-red-500 hover:text-red-700 p-1">Quitar</button></li>';
+                + '<div class="flex-1 min-w-0"><p class="text-sm font-medium truncate">' + esc(f.name) + '</p></div>'
+                + '<button type="button" data-quitar="' + esc(clave) + '" class="shrink-0 text-xs font-medium text-red-500 hover:text-red-700 p-1">Quitar</button></li>';
         }).join('');
         Array.prototype.forEach.call(list.querySelectorAll('[data-quitar]'), function (btn) {
             btn.addEventListener('click', function () {
@@ -382,8 +412,8 @@ $plazoSugerido = SubsanacionService::plazoPorDefecto();
             }
 
             const acuse = data.acuse || {};
-            mostrar('success',
-                'Subsanación registrada con <strong>Nº de cargo ' + (acuse.nroCargo || '') + '</strong>. '
+            mostrarHtml('success',
+                'Subsanación registrada con <strong>Nº de cargo ' + esc(acuse.nroCargo || '') + '</strong>. '
                 + '<a class="underline font-semibold" href="acuse.php?sub=' + encodeURIComponent(data.subsanacionId)
                 + '&t=' + encodeURIComponent(acuse.hash || '') + '" target="_blank">Descargar acuse de subsanación</a>. '
                 + 'El área responsable verificará lo presentado.');

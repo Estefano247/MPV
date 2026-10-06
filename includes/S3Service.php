@@ -190,7 +190,11 @@ final class S3Service
             ],
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HEADER => true,
-            CURLOPT_SSL_VERIFYPEER => false,
+            // La verificación SSL va activa: con peer desactivado, cualquier
+            // intermediario puede leer y alterar la petición (el HEAD confirma
+            // si un adjunto existe en S3 antes de aceptar el alta).
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
         ]);
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);

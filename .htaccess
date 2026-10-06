@@ -1,0 +1,51 @@
+# =====================================================================
+# /solicitudes — Apache (cPanel)
+# =====================================================================
+# Réplica de deploy/router.php: la app no separa público de privado (todo el
+# código está en el docroot), así que estas reglas son la única barrera que
+# impide servir includes/, tests/, el esquema o el .env por HTTP.
+#
+# Requiere AllowOverride All (viene por defecto en cPanel). Comprobar con un
+# GET /.env antes de dar el portal por publicado: si responde 200, el plan del
+# hosting tiene AllowOverride None y hay que activarlo.
+# =====================================================================
+
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Directorios privados (mismo listado que deploy/router.php). En .htaccess
+    # la regla se casa contra la ruta relativa al directorio del fichero, así
+    # que "includes/config.php" cae aquí tanto si la app cuelga de la raíz
+    # como de /solicitudes/.
+    RewriteRule ^(?:includes|docs|tests|bin|deploy|vendor|storage|uploads)(?:/|$) - [F,L]
+
+    # El .git, si acaba subido, es el repo completo con historial.
+    RewriteRule ^\.git(?:/|$) - [F,L]
+</IfModule>
+
+# --- Archivos sueltos -------------------------------------------------
+# Cualquier .env* (.env, .env.local, .env.example) lleva credenciales o
+# instrucciones de configuración: nunca se sirve.
+<FilesMatch "^\.env">
+    Require all denied
+</FilesMatch>
+
+# Ficheros ocultos y de sistema (mismo listado que el router).
+<FilesMatch "^(\.htaccess|\.htpasswd|\.gitignore|\.gitattributes|Thumbs\.db|desktop\.ini|\.user\.ini)$">
+    Require all denied
+</FilesMatch>
+
+# Docker de raíz, si alguien lo sube igualmente.
+<FilesMatch "^(Dockerfile|docker-compose\.yml|docker-compose\.yaml|\.dockerignore|composer\.(json|lock))$">
+    Require all denied
+</FilesMatch>
+
+# Documentos, esquemas, logs y configuraciones: no son páginas (mismo listado
+# que $extensionesBloqueadas del router). `sh`/`yml` se suman porque los
+# scripts de deploy sí existirían en el docroot, y `json` porque la app solo
+# sirve JSON desde PHP, nunca como fichero.
+<FilesMatch "\.(sql|md|log|ini|lock|dist|bak|swp|sh|yml|yaml|json|env)$">
+    Require all denied 
+</FilesMatch>

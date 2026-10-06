@@ -327,3 +327,23 @@ END $$;
 ALTER TABLE files ADD COLUMN IF NOT EXISTS subsanacion_id UUID REFERENCES subsanaciones(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_files_subsanacion_id ON files(subsanacion_id);
+
+-- 13. Usuarios que nacen con la base (idempotente)
+--
+-- Importar este archivo en phpMyAdmin deja el panel operable sin pasar por
+-- admin/setup.php: `superadmin` (rol super-admin, acceso total) y `admin`
+-- (rol admin, operación del panel), ambos con la contraseña por defecto
+-- Admin@2026 (hash bcrypt de coste 10, generado con
+--   php -r "echo password_hash('Admin@2026', PASSWORD_BCRYPT), PHP_EOL;"
+-- ). Cambiarla es poner SEED_ADMIN_PASSWORD / SEED_STAFF_PASSWORD en el .env:
+-- Setup::seedUsuarios() reescribe el hash porque en esta app el .env manda
+-- sobre la base. Mientras exista la contraseña por defecto, rota la contraseña
+-- ANTES de publicar el portal.
+--
+-- ON CONFLICT (username) DO NOTHING: si el usuario ya existe (base en uso),
+-- esta línea no lo toca ni duplica; quien manda sobre su hash es el seed de
+-- PHP, no este INSERT.
+INSERT INTO users (username, password_hash, role, active) VALUES
+    ('superadmin', '$2y$10$yJC2aAMF/hf1afbivcPDGeCGo7WAASHQH/VsO1ZEK4/N.GAhqqYK2', 'super-admin', true),
+    ('admin', '$2y$10$yJC2aAMF/hf1afbivcPDGeCGo7WAASHQH/VsO1ZEK4/N.GAhqqYK2', 'admin', true)
+ON CONFLICT (username) DO NOTHING;

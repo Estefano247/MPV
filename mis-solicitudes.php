@@ -10,6 +10,21 @@ require_once __DIR__ . '/includes/DataProtector.php';
 require_once __DIR__ . '/includes/S3Service.php';
 
 session_name('AMSP_CLIENTE');
+ini_set('session.cookie_httponly', '1');
+ini_set('session.cookie_samesite', 'Lax');
+ini_set('session.use_strict_mode', '1');
+$esHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['SERVER_PORT'] ?? '') === '443')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+ini_set('session.cookie_secure', $esHttps ? '1' : '0');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => $_SERVER['HTTP_HOST'] ?? '',
+    'secure' => $esHttps,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 session_start();
 
 header('Content-Type: application/json; charset=utf-8');
@@ -64,5 +79,5 @@ try {
 } catch (Throwable $e) {
     error_log('[MIS-SOLICITUDES] ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => 'Error al consultar las solicitudes', 'debug' => $e->getMessage()]);
+    echo json_encode(['error' => 'Error al consultar las solicitudes']);
 }

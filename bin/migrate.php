@@ -10,8 +10,9 @@ declare(strict_types=1);
  * no existe y, al crearlo, siembra el usuario admin desde SEED_ADMIN_*.
  *
  * Es idempotente: se puede correr en cada `docker compose up` sin efectos
- * colaterales. Si el esquema ya existe no ejecuta nada (misma comprobación
- * barata de Setup::ensureDatabase).
+ * colaterales. Si el esquema ya existe no reejecuta el DDL (misma comprobación
+ * barata de Setup::ensureDatabase), pero el usuario del panel sí se revisa en
+ * cada arranque.
  *
  *   php bin/migrate.php
  */
@@ -35,6 +36,19 @@ try {
 $config = require __DIR__ . '/../includes/config.php';
 
 $avisos = [];
+
+// ---------------------------------------------------------------------------
+// Estado del usuario del panel
+// ---------------------------------------------------------------------------
+// El seed no propaga errores (un SEED_ADMIN_ROLE mal escrito sería un 500 en
+// todas las páginas del panel), así que el arranque es el único lugar donde se
+// puede decir en voz alta que el panel se quedó sin usuario. No se aborta: el
+// portal funciona igual y admin/setup.php repara el panel una vez arreglada la
+// variable.
+if (Setup::ultimoError() !== null) {
+    $avisos[] = 'ATENCIÓN: el panel se quedó sin usuario — ' . Setup::ultimoError()
+        . ' El portal abre, pero nadie puede entrar al panel.';
+}
 
 // ---------------------------------------------------------------------------
 // Estado de S3

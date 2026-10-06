@@ -8,6 +8,21 @@ require_once __DIR__ . '/includes/Setup.php';
 require_once __DIR__ . '/includes/SubsanacionService.php';
 
 session_name('AMSP_CLIENTE');
+ini_set('session.cookie_httponly', '1');
+ini_set('session.cookie_samesite', 'Lax');
+ini_set('session.use_strict_mode', '1');
+$esHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['SERVER_PORT'] ?? '') === '443')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+ini_set('session.cookie_secure', $esHttps ? '1' : '0');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => $_SERVER['HTTP_HOST'] ?? '',
+    'secure' => $esHttps,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 session_start();
 
 $input = json_decode((string) file_get_contents('php://input'), true) ?? [];
@@ -60,5 +75,5 @@ try {
     ApiResponse::json(['error' => $e->getMessage(), 'details' => $e->errores()], 400);
 } catch (Throwable $e) {
     error_log('[GUARDAR-SUBSANACION] ' . $e->getMessage());
-    ApiResponse::json(['error' => 'Error al registrar la subsanación', 'debug' => $e->getMessage()], 500);
+    ApiResponse::json(['error' => 'Error al registrar la subsanación'], 500);
 }

@@ -8,7 +8,7 @@ declare(strict_types=1);
  * Sustituye al vhost de Apache: la app no separa público de privado (todo el
  * código está en el docroot), así que esta es la única barrera que impide servir
  * includes/, tests/, el esquema, el .env, etc. Devuelve 403 exactamente igual
- * que lo hacía `docker/apache-vhost.conf`.
+ * que lo hacía `deploy/apache-vhost.conf`.
  *
  * Vive FUERA del docroot (en /usr/local/bin) para que ni siquiera se pueda pedir
  * por URL. Cuando una petición no está bloqueada devuelve `false` y el servidor
@@ -21,7 +21,7 @@ $prefijos = [
     '/docs/',
     '/tests/',
     '/bin/',
-    '/docker/',
+    '/deploy/',
     '/vendor/',
     '/.git/',
     '/storage/',

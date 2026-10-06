@@ -1,21 +1,24 @@
 # Stack de pruebas locales: la app PHP y su PostgreSQL.
 #
-#   docker compose up -d --build      levantar
-#   docker compose logs -f app        ver el log
-#   docker compose down               parar
-#   docker compose down -v            parar y borrar la base
+# Este fichero vive en deploy/ para que la raíz del proyecto sea solo PHP, .env y
+# SQL (lo que se sube a cPanel). El contexto de build es el padre, así que se
+# arranca desde la RAÍZ del repo:
+#
+#   docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
+#   docker compose -f deploy/docker-compose.yml logs -f app
+#   docker compose -f deploy/docker-compose.yml down       (sin -v: borra llaves)
 #
 # ---------------------------------------------------------------------------
 # De dónde salen las variables de AWS
 # ---------------------------------------------------------------------------
-# Compose lee el `.env` de este mismo directorio para la sustitución ${VAR}, así
-# que las credenciales de AWS se toman del archivo que ya existe. No hace falta
-# copiarlas a otro lado.
+# Compose lee el `.env` que se le pase con --env-file (la raíz del repo) para la
+# sustitución ${VAR}, así que las credenciales de AWS se toman del archivo que ya
+# existe. No hace falta copiarlas a otro lado.
 #
 # Lo que sí se deja fuera a propósito: APP_DATA_KEY y JWT_SECRET. Son las llaves
 # con las que producción cifra los datos de los asociados, y no deberían
 # cifrar datos de prueba. El contenedor genera las suyas y las guarda en un
-# volumen, para que no cambien entre arranques (ver docker/entrypoint.sh).
+# volumen, para que no cambien entre arranques (ver deploy/entrypoint.sh).
 #
 # ATENCIÓN: el bucket al que apunte este stack es el mismo que usa producción.
 # Las pruebas escriben objetos ahí y el borrado de adjuntos es real. Si se quiere
@@ -48,8 +51,10 @@ services:
 
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      # Contexto = raíz del repo (este fichero está en deploy/), de modo que los
+      # COPY del Dockerfile siguen apuntando a includes/, admin/, schema.sql...
+      context: ..
+      dockerfile: deploy/Dockerfile
     container_name: mpv-app
     restart: unless-stopped
     depends_on:

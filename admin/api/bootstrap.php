@@ -2,6 +2,13 @@
 
 declare(strict_types=1);
 
+// Es un include, no una página: solo existe para que los endpoints de esta
+// carpeta compartan la carga. Pedirlo por URL no tiene que devolver nada.
+if (PHP_SAPI !== 'cli' && realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
+    http_response_code(404);
+    exit;
+}
+
 require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/Database.php';
 require_once __DIR__ . '/../../includes/auth.php';
