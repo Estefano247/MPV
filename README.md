@@ -1,12 +1,12 @@
-﻿# Portal del Asociado — AMSP (`/solicitudes`)
+﻿# Mesa de Partes Virtual — AMSP (`/solicitudes`)
 
-Portal web PHP auto-contenido que permite a un asociado consultar su
-**estado de cuenta de préstamo** y presentar los **procesos de afiliación,
-crédito, pre-evaluación y trámites generales a través de la Mesa de Partes
-Virtual (MPV)** (formulario unificado).
+Portal web PHP auto-contenido que permite presentar **afiliación, crédito,
+pre-evaluación y trámites generales a través de la Mesa de Partes Virtual
+(MPV)** (formulario unificado), dar seguimiento a los expedientes y subsanar
+observaciones.
 
-Consume la API pública de AMSP (`https://amspweb.net/api`) y guarda los
-documentos adjuntos en **AWS S3** (con cifrado en reposo SSE-AES-256).
+Los documentos adjuntos se guardan en **AWS S3** (con cifrado en reposo
+SSE-AES-256).
 
 ---
 
@@ -69,8 +69,7 @@ O bien, nada de lo anterior: **Docker Desktop** y `docker compose up -d --build`
 | `JWT_SECRET` | Secreto para firmar tokens (mín. 32 caracteres) |
 | `APP_DATA_KEY` | Clave de cifrado de datos personales (hex de 32 bytes, AES-256-GCM) |
 | `DATABASE_URL` | DSN de PostgreSQL, ej. `postgresql://user:pass@localhost:5432/db` |
-| `AMSP_API_BASE` | (Opcional) Base de la API AMSP. Por defecto `https://amspweb.net/api` |
-| `PUBLIC_URL` | (Opcional) URL pública del portal. Por defecto `http://localhost:8080` |
+| `PUBLIC_URL` | (Opcional) URL pública del sitio. Por defecto `http://localhost:8080` |
 | `MPV_*` | Datos institucionales de la MPV (número, responsable, correo, horario...) |
 | `MPV_PLAZO_OBSERVACION_DIAS` | Días de plazo para subsanar una observación. Por defecto 10, acotado a 5-90 |
 
@@ -162,7 +161,7 @@ que inyecta Railway).
 | `JWT_SECRET` | 64 hex |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET_NAME` | S3 de los adjuntos |
 | `SEED_ADMIN_USERNAME`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_ROLE` | Usuario del panel (se crea solo al crear el esquema; si no, `admin/setup.php`) |
-| `MPV_*`, `PUBLIC_URL`, `AMSP_API_BASE`, `SESSION_DURATION_HOURS`, `MPV_PLAZO_OBSERVACION_DIAS` | Igual que en el `.env` |
+| `MPV_*`, `PUBLIC_URL`, `SESSION_DURATION_HOURS`, `MPV_PLAZO_OBSERVACION_DIAS` | Igual que en el `.env` |
 
 **Pasos:**
 1. Nuevo proyecto → *Deploy from GitHub repo* → *Add Postgres*.
@@ -300,20 +299,16 @@ El flujo completo vive en `includes/SubsanacionService.php`, con los datos en
 - **Antes de enviar** — `mpv/index.php` muestra miniaturas de las imágenes y
   permite abrir el **PDF o la imagen en un visor modal** (object URL) sin subirlos
   aún; los PDFs se renderizan en línea.
-- **Solicitudes enviadas (asociado)** — `mis-solicitudes.php` expone los archivos
-  de cada presentación (URLs presignadas S3); la sección "Mis solicitudes" del
-  portal (`login.php`) muestra "Archivos (n)" y un visor modal con
-  Previsualizar/Descargar.
 - **Panel administrativo** — el modal de archivos (`admin/index.php`) incorpora
   "Previsualizar" (imagen o PDF en línea) además de la miniatura y la descarga.
 
-Para que el visor en línea funcione, los CSP de `mpv/`, `login.php` y
-`admin/index.php` permiten `blob:` / `frame-src https://*.s3.sa-east-1.amazonaws.com`.
+Para que el visor en línea funcione, los CSP de `mpv/` y `admin/index.php`
+permiten `blob:` / `frame-src https://*.s3.sa-east-1.amazonaws.com`.
 
 ### Panel administrativo (`/solicitudes/admin/`)
 
 Dashboard en PHP puro (sin Node) equivalente al dashboard React original. Funciona
-en cPanel con PHP ≥ 8.1 y guarda en la **misma base PostgreSQL** del portal y usa
+en cPanel con PHP ≥ 8.1 y guarda en la **misma base PostgreSQL** de la app y usa
 el mismo bucket S3.
 
 - `admin/login.php` — Login con JWT httpOnly (`dashboard_token`), bloqueo tras 5
@@ -340,69 +335,6 @@ el mismo bucket S3.
 
 > Borra o protege `admin/setup.php` después de usarlo en producción.
 
-### Flujo de `login.php`
-
-1. El usuario envía su **DNI** y **fecha de nacimiento** (POST).
-2. `AmspApiClient::getSocio()` consulta la API raíz con `dni`, `dia`, `mes`, `anio`.
-3. Si el socio existe, `getSocio` devuelve la ficha y `getCuenta()` trae los
-   movimientos de su préstamo.
-4. El resultado se muestra en pantalla y queda en sesión (clave
-   `amsp_cliente_dni`, vida 3600 s) para no tener que reingresar.
-
----
-
-## API AMSP — Endpoints utilizados
-
-### 1. Datos del asociado
-
-```
-GET https://amspweb.net/api/?dni={dni}&dia={dia}&mes={mes}&anio={anio}
-```
-
-Retorna un array de elementos (normalmente uno). Índices usados por la app:
-
-| Índice | Campo |
-|--------|-------|
-| `[0]` | Código de asociado |
-| `[1]` | Condición |
-| `[2]` | Apellidos y nombres |
-| `[3]` | N° de DNI |
-| `[10]` | Fecha de ingreso |
-| `[18]` | Compañía |
-| `[19]` | Base |
-| `[20]` | Establecimiento |
-| `[21]` | U. Proceso |
-| `[22]` | Ejecutora |
-
-### 2. Estado de cuenta (movimientos)
-
-**GET** `https://amspweb.net/api/cuenta/?id=<codigo_socio>`
-
-Retorna un array de filas; cada fila es un array de **16 campos**:
-
-Resumen:
-
-| Índice | Campo | Nota |
-|-------|--------|------|
-| `[0]` | codigo_socio | |
-| `[1]` | fecha_operacion | |
-| `[2]` | fecha_inicio_periodo | |
-| `[3]` | periodo (MM/AAAA) | |
-| `[4]` | tipo_operacion | `01/03/0Z/2A` desembolso, `10` planilla |
-| `[5]` | forma_pago | `1` = planilla |
-| `[6]` | numero_prestamo | |
-| `[7]` | numero_operacion | `12` = préstamo, `EQ` = planilla |
-| `[8]` | numero_repetido | = índice 6 |
-| `[9]` | correlativo | |
-| `[10]` | monto_base | centésimas (100000 = S/ 1000.00) |
-| `[11]` | fecha_vencimiento | `1899-12-30` = sin dato |
-| `[12]` | descripcion | `Prest AMSP`, `P/Planilla`, ... |
-| `[13]` | cuota | 1, 2, 3, ... |
-| `[14]` | monto (cargo/abono) | negativo = abono |
-| `[15]` | saldo | saldo acumulado |
-
-> La app muestra `—` cuando la fecha es `1899-12-30` (fecha cero del sistema fuente).
-
 ---
 
 ## Estructura
@@ -412,7 +344,6 @@ Resumen:
 ├── .env                    # Variables reales (NO commiterar)
 ├── Dockerfile             # Imagen PHP 8.3, servidor embebido (local y Railway)
 ├── index.php              # Simulador de préstamo
-├── login.php              # Portal del asociado (DNI + fecha nacimiento)
 ├── afiliacion.php         # Redirige a la MPV (trámite de afiliación)
 ├── guardar.php            # Guarda solicitudes
 ├── upload-url.php         # Genera URL S3 firmada (kms/AES256)
@@ -420,7 +351,6 @@ Resumen:
 ├── seguimiento.php        # Seguimiento público de expedientes
 ├── subsanacion.php        # Subsanación pública de observaciones
 ├── guardar-subsanacion.php # POST: registra la subsanación (idempotente)
-├── mis-solicitudes.php    # Listado de presentaciones del asociado
 ├── README.md              # Este documento
 ├── schema.sql             # Esquema único de la BD (solicitudes, MPV, panel, auditoría)
 ├── mpv/                   # Mesa de Partes Virtual
@@ -442,7 +372,6 @@ Resumen:
 │   └── api/               # bootstrap, me, files, status, delete, areas, seguimiento,
 │                          #   derivar, observacion, subsanacion
 └── includes/
-    ├── AmspApiClient.php       # Cliente HTTP de la API AMSP
     ├── config.php              # Carga .env y devuelve configuración
     ├── Database.php            # Conexión PostgreSQL (doble driver)
     ├── S3Service.php           # Firmado y subida a S3 (SSE-AES-256)
@@ -458,8 +387,7 @@ Resumen:
     ├── Audit.php               # Bitácora de auditoría
     ├── Dashboard.php           # Sesión JWT, roles, listado del panel
     ├── helpers.php             # Utilidades (escape, formato, ...)
-    ├── pre-evaluacion.php      # Formulario de pre-evaluación
-    └── solicitud-credito.php   # Formulario de solicitud de crédito
+    └── View.php                # Header, menú y footer compartidos
 ```
 
 ---
@@ -467,7 +395,6 @@ Resumen:
 ## Seguridad
 
 - Las credenciales y la clave de cifrado viven en `.env` (fuera del control de versiones).
-- Validación de DNI (8 dígitos) y fecha de nacimiento con `checkdate`.
 - Escape de salida con `htmlspecialchars` (`e()`) para evitar XSS; CSP con hash en
   páginas que inyectan HTML.
 - Tokens CSRF por sesión en los formularios que persisten datos.

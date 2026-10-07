@@ -36,8 +36,8 @@ if ($token === '' || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $tok
     ApiResponse::error('Token CSRF inválido. Recarga la página e inténtalo de nuevo.', 403);
 }
 
-// El cliente es legacy y manda dos juegos de nombres: afiliacion.php usa
-// nombre/tipo/descripcion, cliente.js (crédito/pre-evaluación) name/type/description.
+// El formulario de la MPV manda los campos en inglés (name/type/description);
+// se aceptan también los nombres en español por compatibilidad con clientes viejos.
 $datos = [
     'nombre'      => trim((string) ($input['nombre'] ?? $input['name'] ?? '')),
     'email'       => strtolower(trim((string) ($input['email'] ?? ''))),
@@ -64,7 +64,7 @@ try {
     // `reenvio` avisa de que el id ya estaba registrado (doble clic, reintento
     // tras un timeout). La respuesta es idéntica a la del primer intento, así que
     // el cliente puede mostrar el mismo acuse sin cambios. Se mantiene 201 para no
-    // romper el manejo de errores de cliente.js, que solo mira res.ok.
+    // romper el manejo de errores del front, que solo mira res.ok.
     ApiResponse::json([
         'message' => $acuse['reenvio']
             ? 'Esta solicitud ya estaba registrada. Se devuelve el acuse original.'

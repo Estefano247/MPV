@@ -44,10 +44,6 @@ if (!isset($GLOBALS['__solicitudes_config'])) {
         's3' => [
             'bucketName' => solicitudes_env('S3_BUCKET_NAME', ''),
         ],
-        'api' => [
-            'base' => solicitudes_env('AMSP_API_BASE') ?: 'https://amspweb.net/api',
-            'plazaUrl' => '/?:dni=&dia=&mes=&anio=',
-        ],
         'app' => [
             'base' => solicitudes_env('PUBLIC_URL') ?: '',
             'uploadUrl' => 'upload-url.php',

@@ -56,7 +56,7 @@ final class SolicitudService
      * @param array<int, mixed> $files Adjuntos ya subidos a S3 con pre-signed URLs
      * @param string|null $submissionId UUID que generó el cliente, si lo generó
      * @param int|null $areaId Área de destino elegida por el remitente
-     * @param string $nombreSesion Nombre real del asociado en el portal ('' si no hay)
+     * @param string $nombreSesion Nombre real del presentante tomado de la sesión ('' si no hay)
      * @return array{id:string,nro_cargo:?string,nro_expediente:?string,acuse_hash:?string,total_archivos:int,reenvio:bool}
      * @throws ValidationException
      */
@@ -223,9 +223,9 @@ final class SolicitudService
     }
 
     /**
-     * El nombre real del asociado lo fija el servidor desde la sesión del
-     * portal, para que en el panel administrativo aparezca la persona y no los
-     * placeholders que enviaba el formulario antiguo.
+     * El nombre real del presentante lo fija el servidor desde la sesión, para
+     * que en el panel administrativo aparezca la persona y no los placeholders
+     * que podía enviar el formulario.
      *
      * @param array{nombre:string,email:string,dni:string,telefono:string,descripcion:string,tipo:string} $datos
      * @return array{nombre:string,email:string,dni:string,telefono:string,descripcion:string,tipo:string}

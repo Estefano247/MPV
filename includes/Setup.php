@@ -15,11 +15,11 @@ require_once __DIR__ . '/password.php';
  * La comprobación es por existencia de la tabla `submissions`: si el esquema ya
  * está, no se reejecuta el DDL y se lee un solo registro de information_schema.
  * Es lo único que paga cada request (Railway lo llama desde las páginas del
- * panel y desde los endpoints del portal), así que el costo es mínimo.
+ * panel y desde los endpoints públicos), así que el costo es mínimo.
  *
  * El CORS del bucket S3 se configura manualmente en AWS y no se toca.
  *
- * Se invoca desde guardar.php, mis-solicitudes.php, mpv/, acuse.php,
+ * Se invoca desde guardar.php, mpv/, acuse.php,
  * seguimiento.php, subsanacion.php, guardar-subsanacion.php, las páginas del
  * panel (login, index, auditoría, setup, APIs) y bin/migrate.php.
  */

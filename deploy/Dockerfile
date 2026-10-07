@@ -14,8 +14,8 @@
 #   pdo_pgsql / pgsql  -> Database.php. El repo usa PDO cuando está disponible
 #                         y cae a la extensión nativa si no, así que se
 #                         instalan las dos y la elección la hace el código.
-#   curl               -> S3Service y AmspApiClient firman peticiones a mano
-#                         con SigV4, sin AWS SDK, sobre curl.
+#   curl               -> S3Service firma peticiones a mano con SigV4, sin AWS
+#                         SDK, sobre curl.
 #   mbstring           -> mb_strlen / mb_substr en el recorte de textos de los
 #                         acuses y las vistas.
 #   sodium             -> scrypt acelerado. Opcional: scrypt.php trae una
@@ -61,8 +61,8 @@ COPY assets/ /var/www/html/assets/
 COPY tests/ /var/www/html/tests/
 COPY admin/ /var/www/html/admin/
 COPY mpv/ /var/www/html/mpv/
-COPY index.php login.php seguimiento.php guardar.php acuse.php \
-     afiliacion.php mis-solicitudes.php upload-url.php subsanacion.php \
+COPY index.php seguimiento.php guardar.php acuse.php \
+     afiliacion.php upload-url.php subsanacion.php \
      guardar-subsanacion.php .env.example .htaccess .user.ini /var/www/html/
 
 # Los .php se leen en cada request, así que la propiedad es de www-data.

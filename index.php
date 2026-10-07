@@ -106,9 +106,6 @@ View::head('Simulador de Préstamo | AMSP', $config, 'calculadora');
                         </table>
                     </div>
 
-                    <div class="mt-6 mb-6 flex flex-wrap gap-3 justify-center">
-                        <a href="login.php" class="inline-flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-lg text-base font-semibold hover:bg-green-700 transition-colors">Iniciar sesión / Portal del Asociado</a>
-                    </div>
                 </div>
 
                 <div class="w-full lg:w-72 shrink-0">

@@ -36,7 +36,7 @@ T::grupo('Layout: el mismo marcado sirve desde la raíz y desde mpv/');
 $casos = [
     ['/index.php', '', ''],
     ['/mpv/index.php', '/mpv', ''],
-    ['/login.php', '', ''],
+    ['/subsanacion.php', '', ''],
     ['/solicitudes/index.php', '', '/solicitudes'],
     ['/solicitudes/mpv/index.php', '/mpv', '/solicitudes'],
     ['/solicitudes/seguimiento.php', '', '/solicitudes'],

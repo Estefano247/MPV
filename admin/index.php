@@ -114,7 +114,7 @@ $tabConfig = [
         <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
             <div>
                 <h1 class="text-xl font-bold text-gray-900">Solicitudes recibidas</h1>
-                <p class="text-sm text-gray-500">Administra y revisa las solicitudes enviadas desde el portal</p>
+                <p class="text-sm text-gray-500">Administra y revisa las solicitudes presentadas en la Mesa de Partes Virtual</p>
             </div>
             <div class="flex items-center gap-2">
                 <a href="auditoria.php" class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">

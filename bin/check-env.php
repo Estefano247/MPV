@@ -14,12 +14,12 @@ if (PHP_SAPI !== 'cli') {
 $requeridas = [
     'pdo_pgsql'  => 'Database.php (ruta PDO)',
     'pgsql'      => 'Database.php (ruta nativa, respaldo)',
-    'curl'       => 'S3Service y AmspApiClient (SigV4 a mano)',
+    'curl'       => 'S3Service (SigV4 a mano)',
     'mbstring'   => 'mb_strlen / mb_substr en acuses y vistas',
     'openssl'    => 'DataProtector y firma HMAC de S3',
     'iconv'      => 'conversión de texto en PDF',
     'json'       => 'respuestas de la API',
-    'session'    => 'sesión del portal y del panel',
+    'session'    => 'sesión de la web (CSRF) y del panel',
 ];
 
 // Opcionales: si faltan, hay fallback en PHP puro (scrypt.php) o no se usan.

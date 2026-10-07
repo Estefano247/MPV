@@ -26,7 +26,6 @@ final class View
      */
     private const MENU = [
         ['clave' => 'mpv', 'texto' => 'Mesa de Partes', 'ruta' => 'mpv/'],
-        ['clave' => 'portal', 'texto' => 'Portal del Asociado', 'ruta' => 'login.php'],
         ['clave' => 'seguimiento', 'texto' => 'Seguimiento', 'ruta' => 'seguimiento.php'],
         ['clave' => 'subsanacion', 'texto' => 'Subsanación', 'ruta' => 'subsanacion.php'],
         ['clave' => 'calculadora', 'texto' => 'Calculadora', 'ruta' => 'index.php'],
@@ -38,8 +37,8 @@ final class View
      * dejarlos fuera hacía que dos vistas tuvieran políticas distintas.
      *
      * frame-src lleva blob: (previsualización del PDF en la MPV) y el bucket de
-     * S3 (archivos enviados en el Portal): quitar cualquiera de los dos rompe una
-     * vista en silencio, porque el fallo se ve dentro de un iframe.
+     * S3 (archivos enviados, visibles en el panel): quitar cualquiera de los dos
+     * rompe una vista en silencio, porque el fallo se ve dentro de un iframe.
      */
     private const CSP = "default-src 'self'; "
         . "script-src 'self' https://cdn.tailwindcss.com 'unsafe-inline'; "

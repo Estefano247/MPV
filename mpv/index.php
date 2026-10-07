@@ -200,7 +200,6 @@ if (!in_array($tipoInicial, $tiposPermitidos, true)) {
                             <li><a href="index.php?tipo=prestamo-solidario" class="text-blue-600 hover:underline">Préstamo Solidario</a></li>
                             <li><a href="index.php?tipo=auxilio-fallecimiento" class="text-blue-600 hover:underline">Auxilio por Fallecimiento</a></li>
                             <li><a href="../seguimiento.php" class="text-blue-600 hover:underline">Seguimiento de trámites</a></li>
-                            <li><a href="../login.php" class="text-blue-600 hover:underline">Portal del Asociado (estado de cuenta)</a></li>
                             <li><a href="../index.php" class="text-blue-600 hover:underline">Simulador de préstamo</a></li>
                         </ul>
                     </div>
